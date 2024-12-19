@@ -1,16 +1,21 @@
 from langgraph.graph import StateGraph, END
 from src.agents.student_info_agent import collect_student_info
-# from src.agents.university_recommendation_agent import recommend_universities # Removed the import
+from src.agents.university_recommendation_agent import university_search_agent  # Import the agent
 # from src.agents.visa_info_agent import fetch_visa_info
 # from src.agents.scholarship_info_agent import fetch_scholarship_info
 from src.agents.management_agent import manage_state
 # from src.agents.document_management_agent import manage_documents
-from src.models import StudentInfo, University, VisaInfo, ScholarshipInfo, Document
+from src.models import StudentInfo # , University, VisaInfo, ScholarshipInfo, Document # Remove unused imports
 from typing import Dict, List, Optional
 import logging
 import streamlit as st
+from typing import Annotated
+import typing
+from src.utils import clean_search_results,scrape_website
 
-def handle_error(state, error):
+
+
+def handle_error(state: typing.Dict, error: Exception) -> typing.Dict:
     """
     Handles errors in the graph and provides a human in the loop fallback.
 
@@ -26,14 +31,14 @@ def handle_error(state, error):
     st.error(f"Error Details: {str(error)}")
     return state
 
-def update_state(state, updates):
+def update_state(state: typing.Dict, updates: Dict) -> typing.Dict:
     """
     Updates the state dictionary with new values
-    
+
     Args:
       state: The current state of the graph.
       updates: The updates to be applied to the state.
-    
+
     Returns:
       The updated state.
     """
@@ -41,22 +46,19 @@ def update_state(state, updates):
         state.update(updates)
     return state
 
+
 def get_workflow():
     """
     Defines and returns the LangGraph workflow for the application.
     """
-    builder = StateGraph(StudentInfo)
+    builder = StateGraph(StudentInfo) # Change the state to StudentInfo
 
     # Define the nodes with state update
-    builder.add_node("student_info", lambda state: update_state(state, collect_student_info()))
-
-    def university_recommendations_node(state):
-       st.info("Running university_recommendations_node")
-       return update_state(state, {"universities": []})
-    
-
-    builder.add_node("university_recommendations", university_recommendations_node)
-
+    builder.add_node("student_info", collect_student_info) # remove the lambda function
+    builder.add_node("raw data",scrape_website )
+    builder.add_node("formatted data", clean_search_results)
+    # Modify university_recommendations_node to use the university_search_agent
+    builder.add_node("university_recommendations", university_search_agent)
     # def visa_info_node(state):
     #   if state and state.get('universities'):
     #     try:
@@ -94,10 +96,13 @@ def get_workflow():
 
     # Set the entry point
     builder.set_entry_point("student_info")
+    # Adding edges to connect the nodes
+    builder.add_edge("student_info", "raw data")  # Connects student_info to raw data
+    builder.add_edge("raw data", "formatted data")  # Connects raw data to formatted data
+
 
     # Define the edges
-    builder.add_edge("student_info", "university_recommendations")
-
+    # builder.add_edge("student_info", "university_recommendations")
     # builder.add_edge("university_recommendations", "visa_info")
     # builder.add_edge("university_recommendations", "scholarship_info")
     #
@@ -106,7 +111,6 @@ def get_workflow():
 
     builder.add_edge("university_recommendations", "management")
     builder.add_edge("management", END)
-
 
     # Add error handling
     builder.add_exception_handler("*", handle_error)

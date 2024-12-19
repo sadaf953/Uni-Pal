@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 class StudentInfo(BaseModel):
     """
@@ -16,6 +16,8 @@ class StudentInfo(BaseModel):
     preferred_countries: List[str]
     btech_branch: str
     interested_field_for_masters: Optional[str] = None
+    university_urls : Optional[Dict[str, List[str]]] = None # add this field to store university urls
+    university_details : Optional[List[Dict]] = None # add this field to store university details
 
 
 class University(BaseModel):

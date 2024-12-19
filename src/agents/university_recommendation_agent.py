@@ -1,56 +1,140 @@
-import pandas as pd
-from src.models import University
-from typing import List, Dict, Any
-from src.config import settings
-from src.utils import convert_currency, search_web, scrape_website, extract_content_with_ai
-import logging
 import os
 import csv
-from langchain.schema import HumanMessage, SystemMessage
+from typing import List, Dict
+from googleapiclient.discovery import build
+from src.config import settings
+from src.models import StudentInfo, University
+from src.utils import safe_log, extract_content_with_ai, search_web, convert_currency
+from typing import Annotated, Dict
+import logging
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+import time
+import pandas as pd
+import re
 
-def recommend_universities(student_info) -> List[University]:
+
+def google_search(search_query: str, api_key: str, num_results: int = 10) -> List[str]:
     """
-    Recommends universities based on student information.
+    Performs a Google Search and returns a list of URLs.
 
     Args:
-      student_info: An object of type StudentInfo containing student details.
+        search_query (str): The search query string.
+        api_key (str): The Google Search API key.
+        num_results (int): The number of results to return.
 
     Returns:
-      A list of University objects representing the top recommended universities.
+        List[str]: A list of URLs from the search results.
     """
-    logging.info("Starting recommend_universities")
-    preferred_countries = student_info.preferred_countries
-    interested_field = student_info.interested_field_for_masters
-    if not preferred_countries or not interested_field:
-        logging.error("Preferred countries or interested field is missing")
+    try:
+        service = build("customsearch", "v1", developerKey=api_key)
+        cse = service.cse()
+        res = (
+            cse.list(q=search_query, cx=settings.google_cse_id, num=num_results).execute()
+        )
+        urls = [item["link"] for item in res.get("items", [])]
+        return urls
+    except Exception as e:
+        safe_log(f"Error during google search : {e}")
         return []
 
+
+def save_universities_to_csv(universities: Dict[str, List[str]], filename: str = "data/Universities.csv") -> None:
+    """
+    Saves the list of university URLs to a CSV file.
+
+    Args:
+        universities (Dict[str, List[str]]): A dictionary of countries to lists of URLs.
+        filename (str): The path to the CSV file.
+    """
+    try:
+        with open(filename, mode="w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            writer.writerow(["country", "url"])
+            for country, urls in universities.items():
+                for url in urls:
+                    writer.writerow([country, url])
+        safe_log(f"Successfully saved universities to {filename}")
+    except Exception as e:
+        safe_log(f"Error saving to CSV: {e}")
+
+
+def setup_selenium_driver():
+    """Sets up the Selenium WebDriver."""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--disable-default-apps")
+    
+    # Add the binary location if it exists in the path
+    chrome_binary_path = os.getenv("CHROME_BINARY_PATH")
+    if chrome_binary_path:
+         chrome_options.binary_location = chrome_binary_path
+
+
+    service = ChromeService(executable_path=os.getenv("CHROME_DRIVER_PATH"))
+
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    return driver
+
+
+def university_search_agent(state: Dict) -> Annotated[Dict, "university_search_agent"]:
+    """
+    Performs a Google search for universities based on student preferences, scrapes course details, and saves the information in the state.
+    Args:
+      state (Dict): The current state of the application, including the student's information.
+    Returns:
+      Dict: The updated state with a list of universities for each country
+    """
+    student_info = state["student_info"]
+    if not isinstance(student_info, StudentInfo):
+        safe_log(f"Expected StudentInfo, got: {type(student_info)}")
+        return state
+
+    if not student_info.preferred_countries:
+        safe_log("No preferred countries found.")
+        return state
+
+    if not student_info.interested_field_for_masters:
+        safe_log("No interested field for masters found.")
+        return state
+
+    universities = {}
+    for country in student_info.preferred_countries:
+        search_query = f"{country} universities for {student_info.interested_field_for_masters}"
+        api_key = settings.google_api_key
+        urls = google_search(search_query, api_key)
+        universities[country] = urls
+    save_universities_to_csv(universities)
+
     all_universities_data = []
-    for country in preferred_countries:
-        query = f"{country} universities for {interested_field}"
-        logging.info(f"Searching for: {query}")
-        search_results = search_web(query)
-        if not search_results:
-            logging.warning(f"No search results for {query}")
-            continue
+    file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'Universities.csv')
 
-        for result in search_results:
-            university_name = result.get('title', 'N/A').split('|')[0].strip() if result.get('title') else "N/A"
-            url = result.get('link', 'N/A')
-            logging.info(f"University name: {university_name} url: {url}")
-            if url == 'N/A':
-                logging.warning(f"No URL found for {university_name}")
-                continue
-
-            search_url_result = search_web(f"{university_name} {interested_field} course page")
-            if not search_url_result or not search_url_result[0].get('link'):
-                logging.warning(f"No course page found for {university_name}")
-                continue
-
-            course_url = search_url_result[0].get('link')
-            logging.info(f"Course url found for {university_name}: {course_url}")
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+       safe_log(f"Error loading universities from csv file {e}")
+       return state
+    
+    driver = setup_selenium_driver()
+    for index, row in df.iterrows():
+            university_name = row['url'].split("/")[2]
+            course_url = row['url']
+            
+            safe_log(f"Course url found for {university_name}: {course_url}")
             if not course_url:
-                logging.warning(f"No course URL found for {university_name}")
+                safe_log(f"No course URL found for {university_name}")
                 continue
 
             llm_prompt = f"""
@@ -63,122 +147,64 @@ def recommend_universities(student_info) -> List[University]:
                 6. Course Curriculum
                 7. Scholarship options
             """
-            logging.info(f"Scraping {course_url} for {university_name}")
-            html = scrape_website(course_url)
-
-            if not html:
-                logging.warning(f"Could not scrape page for {university_name}")
-                continue
-            logging.info(f"Extracting details using LLM for {university_name}")
-            llm_response = extract_content_with_ai(html, llm_prompt)
-
-            if not llm_response:
-                logging.warning(f"No LLM response for {university_name}")
-                continue
-
+            
             try:
-                lines = llm_response.get('extracted_content', " ").split('\n')
-                university_name_llm = lines[0].replace("1. University Name: ", "").strip() if len(lines) > 0 else 'N/A'
-                country = lines[1].replace("2. Country: ", "").strip() if len(lines) > 1 else 'N/A'
-                tuition_fees = lines[2].replace("3. Tuition Fees: ", "").strip() if len(lines) > 2 else 'N/A'
-                eligibility_criteria = lines[3].replace("4. Eligibility Criteria: ", "").strip() if len(lines) > 3 else 'N/A'
-                deadlines = lines[4].replace("5. Deadlines: ", "").strip() if len(lines) > 4 else 'N/A'
-                course_curriculum = lines[5].replace("6. Course Curriculum: ", "").strip() if len(lines) > 5 else 'N/A'
-                scholarship_options = lines[6].replace("7. Scholarship options: ", "").strip() if len(lines) > 6 else 'N/A'
+                safe_log(f"Scraping {course_url} for {university_name}")
+                driver.get(course_url)
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body"))) # Wait for the body to load
+                html = driver.page_source
+                safe_log(f"Extracting details using LLM for {university_name}")
+                llm_response = extract_content_with_ai(html, llm_prompt)
 
-                all_universities_data.append({
-                    "university_name": university_name_llm,
-                    "university_url": course_url,
-                    "country": country,
-                    "tuition_fees_usd": tuition_fees,
-                    "cgpa_requirement": eligibility_criteria,
-                    "deadlines": deadlines,
-                    "course_curriculum": course_curriculum,
-                    "scholarship_options": scholarship_options
-                })
+                if not llm_response or not llm_response.get('extracted_content'):
+                    safe_log(f"No LLM response for {university_name}")
+                    continue
+                
+                extracted_content = llm_response.get('extracted_content', {})
+                if isinstance(extracted_content, dict):
+                  if "tuition_fees" in extracted_content and isinstance(extracted_content["tuition_fees"],str):
+                        currency_match = re.search(r'([A-Z]{3})', extracted_content["tuition_fees"])
+                        if currency_match:
+                            currency = currency_match.group(1)
+                            amount_match = re.search(r'([\d\.]+)', extracted_content["tuition_fees"])
+                            if amount_match:
+                              amount = float(amount_match.group(1))
+                              tuition_fees_inr = convert_currency(amount, currency, 'INR')
+                              currency = "INR"
+                            else:
+                                safe_log(f"Could not parse amount for  {university_name}")
+                                tuition_fees_inr = "N/A"
+                        else:
+                             safe_log(f"Could not parse currency for  {university_name}")
+                             tuition_fees_inr = "N/A"
+                  else:
+                    tuition_fees_inr = "N/A"
+                    currency = "N/A"
+
+                  university_data = University(
+                    name = extracted_content.get('university_name', "N/A"),
+                    url = course_url,
+                    currency = currency,
+                    tuition_fees = str(tuition_fees_inr) if tuition_fees_inr != "N/A" else "N/A",
+                    eligibility_criteria = extracted_content.get('eligibility_criteria', "N/A"),
+                    deadlines = extracted_content.get('deadlines', "N/A"),
+                    course_curriculum = extracted_content.get('course_curriculum', "N/A"),
+                    scholarship_options = extracted_content.get('scholarship_options', "N/A")
+                  )
+                  all_universities_data.append(university_data)
+                else:
+                    safe_log(f"LLM did not return a dict for  {university_name}, instead returned {extracted_content}")
+
+            except TimeoutException:
+                 safe_log(f"Timeout scraping {course_url} for {university_name}")
+                 continue
             except Exception as e:
-                logging.error(f"Error parsing LLM output for {university_name}: {e}")
+                 safe_log(f"Error scraping {course_url} for {university_name} : {e}")
+                 continue
+    driver.quit() # Quit selenium driver
 
-    if not all_universities_data:
-        logging.warning("No university data found")
-        return []
-
-    file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'universities.csv')
-    logging.info(f"Writing to file: {file_path}")
-
-    # Write the data to the csv file
-    with open(file_path, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=all_universities_data[0].keys())
-        writer.writeheader()
-        writer.writerows(all_universities_data)
-
-    df = pd.read_csv(file_path)
-
-    # Convert tuition fees to INR
-    # Create a dictionary for currency conversion
-    currency_map = {
-        "USA": "USD",
-        "UK": "GBP",
-        "Australia": "AUD",
-    }
-
-    df["currency"] = df["country"].map(currency_map)
-
-    def convert_fees(row):
-        if row['currency'] is None:
-            logging.warning(f"No currency found for {row['university_name']}")
-            return None
-        return convert_currency(row['tuition_fees_usd'], row['currency'], 'INR')
-
-    df["tuition_fees_inr"] = df.apply(convert_fees, axis=1)
-
-    df["score"] = 0
-    for index, row in df.iterrows():
-        score = 0
-        if row["country"] in student_info.preferred_countries:
-            score += 10
-        if 'cgpa_requirement' in row and isinstance(row['cgpa_requirement'], str):
-            try:
-                cgpa = float(row['cgpa_requirement'].split("CGPA")[0].strip().split("with")[-1].strip())
-                if cgpa <= student_info.btech_cgpa:
-                    score += 10
-            except:
-                logging.warning(f"Could not parse cgpa requirement for {row['university_name']}")
-        if 'ielts_requirement' in row and isinstance(row['ielts_requirement'], str):
-            try:
-                ielts = float(row['ielts_requirement'].split("+")[0].strip())
-                if student_info.ielts_score is not None and ielts <= student_info.ielts_score:
-                    score += 5
-            except:
-                logging.warning(f"Could not parse ielts requirement for {row['university_name']}")
-
-        if 'toefl_requirement' in row and isinstance(row['toefl_requirement'], str):
-            try:
-                toefl = float(row['toefl_requirement'].split("+")[0].strip())
-                if student_info.toefl_score is not None and toefl <= student_info.toefl_score:
-                    score += 5
-            except:
-                logging.warning(f"Could not parse toefl requirement for {row['university_name']}")
-
-        # Add score based on interested field for Masters if available
-        if student_info.interested_field_for_masters:
-            # This would require adding a column in universities.csv for specialization/field
-            # For now, we'll leave it as a placeholder
-            score += 3
-
-        df.loc[index, 'score'] = score
-
-    df = df.sort_values(by="score", ascending=False)
-    recommended_universities = df.head(5)
-    universities = [
-        University(
-            name=row['university_name'],
-            url=row['university_url'],
-            tuition_fees=str(row['tuition_fees_inr']) if row['tuition_fees_inr'] is not None else "N/A",
-            currency='INR',
-            eligibility_criteria=f"B.Tech with {row['cgpa_requirement']} CGPA or above, IELTS {row['ielts_requirement'] if 'ielts_requirement' in row else 'N/A'}+, TOEFL {row['toefl_requirement'] if 'toefl_requirement' in row else 'N/A'}+"
-        )
-        for index, row in recommended_universities.iterrows()
-    ]
-    logging.info(f"Returning {len(universities)} universities")
-    return universities
+    # Update the state
+    updated_student_info = student_info.copy(update={"university_details": all_universities_data})
+    state["student_info"] = updated_student_info
+    
+    return state

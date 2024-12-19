@@ -16,9 +16,9 @@ from src.models import StudentInfo
 from src.graph_workflow import get_workflow
 import logging
 from typing import Optional
-from src.agents.university_recommendation_agent import recommend_universities
+# from src.agents.university_recommendation_agent import recommend_universities # Remove the import
 from src.llm_interface import query_llm
-from src.utils import scrape_website # Add the import here.
+from src.utils import scrape_website, extract_content_with_ai, search_web, clean_search_results # Add the import here.
 settings.LLM_PROVIDER = "groq" # Explicitly set LLM_PROVIDER to groq
 logging.info(f"LLM_PROVIDER set to : {settings.LLM_PROVIDER}")
 
@@ -108,13 +108,13 @@ def main():
             st.error(f"Error testing LLM: {e}")
             logging.error(f"Error testing LLM: {e}")
         
-        if st.button("Test Selenium"):
+        if st.button("Test Web Scraping (Requests)"): # Renamed the button
             try:
               html = scrape_website("https://www.example.com")
-              st.info(f"Selenium response: {html}")
+              st.info(f"Scrape response: {html}")
             except Exception as e:
-                st.error(f"Error testing selenium: {e}")
-                logging.error(f"Error testing selenium: {e}")
+                st.error(f"Error testing web scraping: {e}")
+                logging.error(f"Error testing web scraping: {e}")
 
         test_url = st.text_input("Test Website URL", placeholder="Enter a URL to test")
         if st.button("Test Web Scrape", key="test_scrape"):
@@ -124,108 +124,67 @@ def main():
             except Exception as e:
                 st.error(f"Error scraping {test_url}: {e}")
                 logging.error(f"Error scraping {test_url}: {e}")
-        
-        test_scrape_url = st.text_input("Test URL for University Recommendations", placeholder="Enter a URL to test the scraping")
-        if st.button("Test URL Scraping"):
+
+        if test_url and st.button("Test Raw Scraping Data"):
             try:
-                test_student_data = StudentInfo(
-                    name="Test User",
-                    contact_info="test@example.com",
-                    marks_10th=90,
-                    marks_12th=92,
-                    btech_cgpa=8.5,
-                    ielts_score=7.0,
-                    toefl_score=100,
-                    work_experience="2 years",
-                    preferred_countries=["USA"],
-                    btech_branch="Computer Science",
-                    interested_field_for_masters="Computer Science"
-                )
-                logging.info(f"Testing scraping with URL {test_scrape_url}")
-                all_universities_data = []
-                search_results = search_web(test_scrape_url)
-                if not search_results:
-                    logging.warning(f"No search results for {test_scrape_url}")
-                
-                for result in search_results:
-                    university_name = result.get('title', 'N/A').split('|')[0].strip() if result.get('title') else "N/A"
-                    url = result.get('link', 'N/A')
-                    logging.info(f"University name: {university_name} url: {url}")
-                    if url == 'N/A':
-                        logging.warning(f"No URL found for {university_name}")
-                        continue
-                    
-                    logging.info(f"Scraping {url} for {university_name}")
-                    html = scrape_website(url)
-                    
-                    if not html:
-                        logging.warning(f"Could not scrape page for {university_name}")
-                        continue
-                    logging.info(f"Got HTML: {html[:500]}")
-                    llm_prompt = f"""
-                    Extract the following information from the HTML, and return in the format I requested:
+                logging.info(f"Testing raw scraping with URL {test_url}")
+                html = scrape_website(test_url)
+                llm_prompt = """
+                    Please extract the following information from the webpage content:
                     1. University Name
                     2. Country
                     3. Tuition Fees (Mention Currency)
-                    4. Eligibility Criteria (B.Tech CGPA, IELTS and TOEFL requirements)
+                    4. Eligibility Criteria
                     5. Deadlines
                     6. Course Curriculum
                     7. Scholarship options
                     """
-                    logging.info(f"Extracting details using LLM for {university_name}")
-                    llm_response = extract_content_with_ai(html, llm_prompt) # Used extract_content_with_ai instead of extract_course_details
-
-                    if not llm_response:
-                      logging.warning(f"No LLM response for {university_name}")
-                      continue
-
-                    try:
-                        lines = llm_response.get('extracted_content', " ").split('\n')
-                        university_name_llm = lines[0].replace("1. University Name: ", "").strip() if len(lines) > 0 else 'N/A'
-                        country = lines[1].replace("2. Country: ", "").strip() if len(lines) > 1 else 'N/A'
-                        tuition_fees = lines[2].replace("3. Tuition Fees: ", "").strip() if len(lines) > 2 else 'N/A'
-                        eligibility_criteria = lines[3].replace("4. Eligibility Criteria: ", "").strip() if len(lines) > 3 else 'N/A'
-                        deadlines = lines[4].replace("5. Deadlines: ", "").strip() if len(lines) > 4 else 'N/A'
-                        course_curriculum = lines[5].replace("6. Course Curriculum: ", "").strip() if len(lines) > 5 else 'N/A'
-                        scholarship_options = lines[6].replace("7. Scholarship options: ", "").strip() if len(lines) > 6 else 'N/A'
-
-                        university_data = {
-                           "university_name": university_name_llm,
-                            "university_url": course_url,
-                            "country": country,
-                            "tuition_fees_usd": tuition_fees,
-                            "cgpa_requirement": eligibility_criteria,
-                            "deadlines": deadlines,
-                            "course_curriculum": course_curriculum,
-                            "scholarship_options": scholarship_options
-                           }
-                        all_universities_data.append(university_data)
-                        st.json(university_data)
-                    except Exception as e:
-                         st.error(f"Error parsing LLM output for {university_name}: {e}")
-                         logging.error(f"Error parsing LLM output for {university_name}: {e}")
+                llm_response = extract_content_with_ai(html, llm_prompt)
+                st.session_state.raw_results = {
+                    "extracted_content": llm_response
+                }
+                # Display raw results in markdown
+                st.subheader("Raw Extracted Content")
+                st.markdown(llm_response, unsafe_allow_html=True)
+                st.success("Raw results stored in session state")
             except Exception as e:
-                st.error(f"Error testing scraping with URL {test_scrape_url}: {e}")
-                logging.error(f"Error testing scraping with URL {test_scrape_url}: {e}")
+                st.error(f"Error scraping with URL {test_url}: {e}")
+                logging.error(f"Error scraping with URL {test_url}: {e}")
 
+        if st.button("Test Clean Search Results"):
+            try:
+                if st.session_state.raw_results:
+                    mock_state = {"raw_search_results": st.session_state.raw_results}
+                    cleaned_results = clean_search_results(mock_state)
+                    st.subheader("Cleaned Search Results")
+                    if isinstance(cleaned_results, dict) and "cleaned_results" in cleaned_results:
+                        st.markdown(cleaned_results["cleaned_results"], unsafe_allow_html=True)
+                    else:
+                        st.markdown(cleaned_results["raw_search_results"]["extracted_content"], unsafe_allow_html=True)
+                    st.json(cleaned_results)
+                else:
+                    st.warning("Please run the raw scraping first to get data to clean")
+            except Exception as e:
+                st.error(f"Error cleaning search results: {e}")
+                logging.error(f"Error cleaning search results: {e}")
 
-        if st.button("Next Step: University Recommendations"):
-           st.session_state.next_step = True
-           st.info(f"Button Clicked, next_step set to: {st.session_state.next_step}")
-
+        # if st.button("Next Step: University Recommendations"):
+        #    st.session_state.next_step = True
+        #    st.info(f"Button Clicked, next_step set to: {st.session_state.next_step}")
+        #     except Exception as e:
+        #         st.error(f"Error saving the data: {e}")
+        #         logging.error(f"Error saving the data: {e}")
 
         if st.session_state.get('next_step', False):
             try:
                 # Get university recommendations and save the information in universities.csv
-                recommendations = recommend_universities(student_data)
-                if not recommendations:
-                    st.error("No universities found based on the given preferences. Please check the logs for more details.")
-                    return
+                # recommendations = recommend_universities(student_data) # Remove this line
                 logging.info("About to invoke LangGraph workflow")
                 workflow = get_workflow()
-                result = workflow.invoke(student_data.model_dump())
+                result = workflow.invoke({"student_info": student_data}) # Pass student_data as a dictionary in state
                 logging.info("LangGraph workflow invoked successfully")
                 st.session_state.workflow_completed = True
+                st.write(f"Result from LangGraph {result}") # Display the results of the graph
             except Exception as e:
                 st.error(f"Error running the workflow: {e}")
                 logging.error(f"Error running the workflow: {e}")
@@ -242,4 +201,10 @@ if __name__ == "__main__":
         st.session_state.table_created = False
     if 'skip_student_info' not in st.session_state:
         st.session_state.skip_student_info = False
+    if 'raw_results' not in st.session_state:
+        st.session_state.raw_results = False
+    if  'cleaned_results' not in st.session_state:
+        st.session_state.cleaned_results = None
+    if 'markdown' not in st.session_state:
+        st.session_state.markdown = None
     main()
