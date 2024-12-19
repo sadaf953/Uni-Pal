@@ -32,8 +32,6 @@ def fetch_scholarship_info(student_info):
     - 12th Marks: {student_info.get('marks_12th', 'N/A')}
     - B.Tech CGPA: {student_info.get('btech_cgpa', 'N/A')}
     - B.Tech Branch: {student_info.get('btech_branch', 'N/A')}
-    -Interested Field for Masters: {student_info.get('Interested_feild_for_Masters', 'N/A')}
-    - Work Experience: {student_info.get('work_experience', 'N/A')}
     - IELTS Score: {student_info.get('ielts_score', 'N/A')}
     - TOEFL Score: {student_info.get('toefl_score', 'N/A')}
     - Preferred Countries: {preferred_countries}

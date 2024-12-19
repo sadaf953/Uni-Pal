@@ -1,84 +1,69 @@
 import streamlit as st
 from src.models import Document
+from typing import List, Optional
+import logging
 
-def manage_documents(student_info=None):
+def manage_documents(student_info=None) -> Optional[List[Document]]:
     """
-    Manage and display document requirements for the student
-    
+    Manage and display document requirements for the student.
+
     Args:
-        student_info (dict or StudentInfo, optional): Student information
-    
+        student_info (dict or StudentInfo, optional): Student information.
+
     Returns:
-        dict: Document management information
+        A list of Document objects or None if an error occurs.
     """
-    # Convert Pydantic model to dictionary if needed
-    if hasattr(student_info, 'model_dump'):
-        student_info = student_info.model_dump()
-    
-    # Define a list of standard documents required for university applications
-    standard_documents = [
-        Document(
-            name="10th Grade Marksheet",
-            status="Pending",
-            required=True,
-            description="Official marksheet/transcript from 10th grade"
-        ),
-        Document(
-            name="12th Grade Marksheet",
-            status="Pending",
-            required=True,
-            description="Official marksheet/transcript from 12th grade"
-        ),
-        Document(
-            name="B.Tech Degree/Marksheet",
-            status="Pending",
-            required=True,
-            description="Official B.Tech degree or latest semester marksheet"
-        ),
-        Document(
-            name="IELTS/TOEFL Score",
-            status="Pending",
-            required=True,
-            description="English proficiency test score"
-        ),
-        Document(
-            name="Passport",
-            status="Pending",
-            required=True,
-            description="Valid passport for international travel"
-        ),
-        Document(
-            name="Statement of Purpose (SOP)",
-            status="Pending",
-            required=True,
-            description="Personal essay explaining academic and career goals"
-        )
-    ]
-    
-    # Display document requirements in Streamlit
-    st.subheader("Document Management")
-    
-    # Create a form to track document status
-    with st.form("document_status_form"):
-        for doc in standard_documents:
-            doc.status = st.selectbox(
-                f"{doc.name} Status", 
-                ["Pending", "In Progress", "Completed"], 
-                index=0 if doc.status == "Pending" else 1 if doc.status == "In Progress" else 2
+    try:
+        # Convert Pydantic model to dictionary if needed
+        if hasattr(student_info, 'model_dump'):
+           student_info = student_info.model_dump()
+
+        # Define a list of standard documents required for university applications
+        standard_documents = [
+            Document(
+                id=1,
+                name="10th Grade Marksheet",
+                status="Pending",
+                required=True,
+                description="Official marksheet/transcript from 10th grade"
+            ),
+            Document(
+                id=2,
+                name="12th Grade Marksheet",
+                status="Pending",
+                required=True,
+                description="Official marksheet/transcript from 12th grade"
+            ),
+            Document(
+                id=3,
+                name="B.Tech Degree/Marksheet",
+                status="Pending",
+                required=True,
+                description="Official B.Tech degree or latest semester marksheet"
+            ),
+            Document(
+                id=4,
+                name="IELTS/TOEFL Score",
+                status="Pending",
+                required=True,
+                description="English proficiency test score"
+            ),
+            Document(
+                id=5,
+                name="Passport",
+                status="Pending",
+                required=True,
+                description="Valid passport for international travel"
+            ),
+            Document(
+                id=6,
+                name="Statement of Purpose (SOP)",
+                status="Pending",
+                required=True,
+                description="Personal essay explaining academic and career goals"
             )
-        
-        submitted = st.form_submit_button("Update Document Status")
-        if submitted:
-            st.success("Document status updated successfully!")
-    
-    # Display document requirements
-    st.write("### Document Requirements")
-    for doc in standard_documents:
-        with st.expander(f"{doc.name} - {doc.status}"):
-            st.write(f"**Description:** {doc.description}")
-            st.write(f"**Required:** {'Yes' if doc.required else 'No'}")
-    
-    # Return a dictionary of document information
-    return {
-        'documents': [doc.model_dump() for doc in standard_documents]
-    }
+        ]
+        return standard_documents
+    except Exception as e:
+         logging.error(f"Error managing documents: {e}")
+         return None
