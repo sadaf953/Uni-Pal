@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 # Get the absolute path of the project root
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -16,12 +17,22 @@ from src.models import StudentInfo
 from src.graph_workflow import get_workflow
 import logging
 from typing import Optional
-# from src.agents.university_recommendation_agent import recommend_universities # Remove the import
 from src.llm_interface import query_llm
-from src.utils import scrape_website, extract_content_with_ai, search_web, clean_search_results # Add the import here.
-settings.LLM_PROVIDER = "groq" # Explicitly set LLM_PROVIDER to groq
+from src.utils import scrape_website, extract_content_with_ai, search_web, clean_search_results
+settings.LLM_PROVIDER = "groq" 
 logging.info(f"LLM_PROVIDER set to : {settings.LLM_PROVIDER}")
 
+
+def save_raw_results(data):
+    with open('raw_results.json', 'w') as f:
+        json.dump(data, f)
+
+def load_raw_results():
+    try:
+        with open('raw_results.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
 
 def main():
     """
@@ -78,17 +89,17 @@ def main():
         st.success("Form Submitted Successfully!")
         st.subheader("Your Information:")
         # Display data in a nice format
-        st.write(f"**Full Name:** {student_data.name}")
-        st.write(f"**Contact Email/Phone:** {student_data.contact_info}")
-        st.write(f"**10th Grade Marks/Percentage:** {student_data.marks_10th}")
-        st.write(f"**12th Grade Marks/Percentage:** {student_data.marks_12th}")
-        st.write(f"**B.Tech CGPA:** {student_data.btech_cgpa}")
-        st.write(f"**IELTS Score:** {student_data.ielts_score if student_data.ielts_score is not None else 'N/A'}")
-        st.write(f"**TOEFL Score:** {student_data.toefl_score if student_data.toefl_score is not None else 'N/A'}")
-        st.write(f"**Work Experience:** {student_data.work_experience if student_data.work_experience else 'N/A'}")
-        st.write(f"**Preferred Countries:** {', '.join(student_data.preferred_countries) if student_data.preferred_countries else 'N/A'}")
-        st.write(f"**B.Tech Branch:** {student_data.btech_branch}")
-        st.write(f"**Interested Field for Masters:** {student_data.interested_field_for_masters if student_data.interested_field_for_masters else 'N/A'}")
+        st.write(f"Full Name: {student_data.name}")
+        st.write(f"Contact Email/Phone: {student_data.contact_info}")
+        st.write(f"10th Grade Marks/Percentage: {student_data.marks_10th}")
+        st.write(f"12th Grade Marks/Percentage: {student_data.marks_12th}")
+        st.write(f"B.Tech CGPA: {student_data.btech_cgpa}")
+        st.write(f"IELTS Score: {student_data.ielts_score if student_data.ielts_score is not None else 'N/A'}")
+        st.write(f"TOEFL Score: {student_data.toefl_score if student_data.toefl_score is not None else 'N/A'}")
+        st.write(f"Work Experience: {student_data.work_experience if student_data.work_experience else 'N/A'}")
+        st.write(f"Preferred Countries: {', '.join(student_data.preferred_countries) if student_data.preferred_countries else 'N/A'}")
+        st.write(f"B.Tech Branch: {student_data.btech_branch}")
+        st.write(f"Interested Field for Masters: {student_data.interested_field_for_masters if student_data.interested_field_for_masters else 'N/A'}")
 
         try:
             data = student_data.model_dump()
@@ -108,83 +119,51 @@ def main():
             st.error(f"Error testing LLM: {e}")
             logging.error(f"Error testing LLM: {e}")
         
-        if st.button("Test Web Scraping (Requests)"): # Renamed the button
-            try:
-              html = scrape_website("https://www.example.com")
-              st.info(f"Scrape response: {html}")
-            except Exception as e:
-                st.error(f"Error testing web scraping: {e}")
-                logging.error(f"Error testing web scraping: {e}")
+        if st.button("Use Predefined URL"):
+            st.session_state.test_url = "https://postgraduate.degrees.ed.ac.uk/?id=107%2520&r=site/view&edition=2025"
 
-        test_url = st.text_input("Test Website URL", placeholder="Enter a URL to test")
-        if st.button("Test Web Scrape", key="test_scrape"):
-            try:
-                 html = scrape_website(test_url)
-                 st.info(f"Scrape response: {html}")
-            except Exception as e:
-                st.error(f"Error scraping {test_url}: {e}")
-                logging.error(f"Error scraping {test_url}: {e}")
+        test_url = st.text_input("Test Website URL", placeholder="Enter a URL to test", value=st.session_state.get('test_url', ''))
 
-        if test_url and st.button("Test Raw Scraping Data"):
+        if st.button("Run All Steps"):
             try:
-                logging.info(f"Testing raw scraping with URL {test_url}")
-                html = scrape_website(test_url)
-                llm_prompt = """
-                    Please extract the following information from the webpage content:
-                    1. University Name
-                    2. Country
-                    3. Tuition Fees (Mention Currency)
-                    4. Eligibility Criteria
-                    5. Deadlines
-                    6. Course Curriculum
-                    7. Scholarship options
-                    """
-                llm_response = extract_content_with_ai(html, llm_prompt)
+                st.info("Starting raw data scraping...")
+                raw_results = scrape_website(test_url)
+                st.success("Raw data scraped successfully.")
+
+                st.info("Saving raw results...")
                 st.session_state.raw_results = {
-                    "extracted_content": llm_response
+                    "web_search_results": {
+                        "raw_data": raw_results
+                    }
                 }
-                # Display raw results in markdown
-                st.subheader("Raw Extracted Content")
-                st.markdown(llm_response, unsafe_allow_html=True)
-                st.success("Raw results stored in session state")
-            except Exception as e:
-                st.error(f"Error scraping with URL {test_url}: {e}")
-                logging.error(f"Error scraping with URL {test_url}: {e}")
+                save_raw_results(st.session_state.raw_results)  # Save raw results locally
+                st.success("Raw results saved successfully.")
 
-        if st.button("Test Clean Search Results"):
-            try:
-                if st.session_state.raw_results:
-                    mock_state = {"raw_search_results": st.session_state.raw_results}
-                    cleaned_results = clean_search_results(mock_state)
-                    st.subheader("Cleaned Search Results")
-                    if isinstance(cleaned_results, dict) and "cleaned_results" in cleaned_results:
-                        st.markdown(cleaned_results["cleaned_results"], unsafe_allow_html=True)
-                    else:
-                        st.markdown(cleaned_results["raw_search_results"]["extracted_content"], unsafe_allow_html=True)
-                    st.json(cleaned_results)
-                else:
-                    st.warning("Please run the raw scraping first to get data to clean")
-            except Exception as e:
-                st.error(f"Error cleaning search results: {e}")
-                logging.error(f"Error cleaning search results: {e}")
+                st.info("Cleaning raw results...")
+                cleaned_results = clean_search_results(st.session_state.raw_results)
+                st.session_state.cleaned_results = cleaned_results
+                st.success("Cleaned results generated successfully.")
 
-        # if st.button("Next Step: University Recommendations"):
-        #    st.session_state.next_step = True
-        #    st.info(f"Button Clicked, next_step set to: {st.session_state.next_step}")
-        #     except Exception as e:
-        #         st.error(f"Error saving the data: {e}")
-        #         logging.error(f"Error saving the data: {e}")
+                st.info("Extracting content with AI...")
+                extracted_content = extract_content_with_ai(cleaned_results['web_search_results']['raw_data'], 'Extract relevant information')
+                st.session_state.extracted_content = extracted_content
+                st.success("Content extracted successfully.")
+                st.write(extracted_content.get('extracted_content', 'No content extracted.'))
+
+            except Exception as e:
+                st.error(f"Error in processing: {e}")
+                logging.error(f"Error in processing: {e}")
 
         if st.session_state.get('next_step', False):
             try:
                 # Get university recommendations and save the information in universities.csv
-                # recommendations = recommend_universities(student_data) # Remove this line
+                # recommendations = recommend_universities(student_data) 
                 logging.info("About to invoke LangGraph workflow")
                 workflow = get_workflow()
-                result = workflow.invoke({"student_info": student_data}) # Pass student_data as a dictionary in state
+                result = workflow.invoke({"student_info": student_data}) 
                 logging.info("LangGraph workflow invoked successfully")
                 st.session_state.workflow_completed = True
-                st.write(f"Result from LangGraph {result}") # Display the results of the graph
+                st.write(f"Result from LangGraph {result}") 
             except Exception as e:
                 st.error(f"Error running the workflow: {e}")
                 logging.error(f"Error running the workflow: {e}")
@@ -207,4 +186,6 @@ if __name__ == "__main__":
         st.session_state.cleaned_results = None
     if 'markdown' not in st.session_state:
         st.session_state.markdown = None
+    if 'test_url' not in st.session_state:
+        st.session_state.test_url = ''
     main()

@@ -389,28 +389,13 @@ def clean_search_results(state: Dict) -> Dict:
     """
     try:
         formatted_results = ["## 📚 Web Search Results\n"]
-        web_search_results = state.get("web_search_results", {})
+        web_search_results = state.get("web_search_results", {}).get("raw_data", '')
         
         if not web_search_results:
             formatted_results.append("\nNo web search results available.\n")
         else:
-            for query, results in web_search_results.items():
-                formatted_results.append(f"\n### 🔍 Results for: {query}\n")
-                
-                if not results:
-                    formatted_results.append("No results found for this query.\n")
-                    continue
-                    
-                for result in results:
-                    if not isinstance(result, dict):
-                        continue
-                        
-                    title = result.get('title', result.get('name', 'Untitled'))
-                    url = result.get('url', result.get('link', '#'))
-                    content = result.get('content', result.get('snippet', result.get('description', 'No content available')))
-                    
-                    formatted_results.append(f"\n#### [{title}]({url})\n")
-                    formatted_results.append(f"{content}\n")
+            # Process the raw data directly
+            formatted_results.append(web_search_results)
         
         # Add scraped website results
         scraped_content = state.get("scraped_content")
