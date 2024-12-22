@@ -3,7 +3,7 @@ from src.agents.student_info_agent import collect_student_info
   # Import the agent
 # from src.agents.visa_info_agent import fetch_visa_info
 # from src.agents.scholarship_info_agent import fetch_scholarship_info
-from src.agents.management_agent import manage_state
+# from src.agents.management_agent import manage_state
 # from src.agents.document_management_agent import manage_documents
 from src.models import StudentInfo # , University, VisaInfo, ScholarshipInfo, Document # Remove unused imports
 from typing import Dict, List, Optional
@@ -49,10 +49,10 @@ def get_workflow():
     """
     Defines and returns the LangGraph workflow for the application.
     """
-    builder = StateGraph(StudentInfo) # Change the state to StudentInfo
+    # builder = StateGraph(StudentInfo) # Change the state to StudentInfo
 
-    # Define the nodes with state update
-    builder.add_node("student_info", collect_student_info) # remove the lambda function
+    # # Define the nodes with state update
+    # builder.add_node("student_info", collect_student_info) # remove the lambda function
 
     # Modify university_recommendations_node to use the university_search_agent
     # builder.add_node("university_recommendations", university_search_agent)
@@ -89,23 +89,23 @@ def get_workflow():
     # builder.add_node("scholarship_info", scholarship_info_node)
     #
     # builder.add_node("document_management", lambda state: update_state(state, manage_documents(state)))
-    builder.add_node("management", manage_state)
+    # builder.add_node("management", manage_state)
 
-    # Set the entry point
-    builder.set_entry_point("student_info")
+    # # Set the entry point
+    # builder.set_entry_point("student_info")
 
-    # Define the edges
-    builder.add_edge("student_info", "university_recommendations")
-    # builder.add_edge("university_recommendations", "visa_info")
-    # builder.add_edge("university_recommendations", "scholarship_info")
-    #
-    # builder.add_edge("visa_info", "document_management")
-    # builder.add_edge("scholarship_info", "document_management")
+    # # Define the edges
+    # builder.add_edge("student_info", "university_recommendations")
+    # # builder.add_edge("university_recommendations", "visa_info")
+    # # builder.add_edge("university_recommendations", "scholarship_info")
+    # #
+    # # builder.add_edge("visa_info", "document_management")
+    # # builder.add_edge("scholarship_info", "document_management")
 
-    builder.add_edge("university_recommendations", "management")
-    builder.add_edge("management", END)
+    # builder.add_edge("university_recommendations", "management")
+    # builder.add_edge("management", END)
 
-    # Add error handling
-    builder.add_exception_handler("*", handle_error)
+    # # Add error handling
+    # builder.add_exception_handler("*", handle_error)
 
-    return builder.compile()
+    # return builder.compile()

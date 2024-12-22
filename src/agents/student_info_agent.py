@@ -3,6 +3,8 @@ from src.models import StudentInfo
 import logging
 import re
 from typing import Dict
+from src.database import Database
+
 
 def is_valid_email(email: str) -> bool:
     """
@@ -109,3 +111,74 @@ def collect_student_info() -> Dict | None:
            btech_branch="Computer Science",
            interested_field_for_masters="Computer Science"
        )}
+
+
+def student_info_page():
+    st.title("Student Information")
+    db = Database()
+    table_name = "student_info"
+
+    if 'table_created' not in st.session_state:
+        try:
+            db.connect()
+            cursor = db.conn.cursor()
+            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+            table_exists = cursor.fetchone()
+            if not table_exists:
+                columns = StudentInfo.model_fields
+                db.create_table(table_name, columns={key: "TEXT" for key in columns})
+                logging.info(f"Table {table_name} created.")
+            st.session_state.table_created = True
+        except Exception as e:
+            logging.error(f"Error during table creation: {e}")
+            st.error(f"Error during table creation: {e}")
+        finally:
+            db.close()
+
+    skip_student_info = st.button("Skip Student Info", key="skip_student_info_button") # Added a key
+    if skip_student_info:
+        st.session_state.skip_student_info = True
+
+    student_data: Optional[StudentInfo] = None
+    if not st.session_state.get("skip_student_info", False):
+        student_data = collect_student_info()
+    else:
+        student_data = StudentInfo(
+            name="Test User",
+            contact_info="test@example.com",
+            marks_10th=90,
+            marks_12th=92,
+            btech_cgpa=8.5,
+            ielts_score=7.0,
+            toefl_score=100,
+            work_experience="2 years",
+            preferred_countries=["USA"],
+            btech_branch="Computer Science",
+            interested_field_for_masters="Computer Science"
+        )
+
+    if student_data:
+        st.session_state.student_data = student_data # Store student data in session state
+        st.success("Form Submitted Successfully!")
+        st.subheader("Your Information:")
+        st.write(f"Full Name: {student_data.name}")
+        st.write(f"Contact Email/Phone: {student_data.contact_info}")
+        st.write(f"10th Grade Marks/Percentage: {student_data.marks_10th}")
+        st.write(f"12th Grade Marks/Percentage: {student_data.marks_12th}")
+        st.write(f"B.Tech CGPA: {student_data.btech_cgpa}")
+        st.write(f"IELTS Score: {student_data.ielts_score if student_data.ielts_score is not None else 'N/A'}")
+        st.write(f"TOEFL Score: {student_data.toefl_score if student_data.toefl_score is not None else 'N/A'}")
+        st.write(f"Work Experience: {student_data.work_experience if student_data.work_experience else 'N/A'}")
+        st.write(f"Preferred Countries: {', '.join(student_data.preferred_countries) if student_data.preferred_countries else 'N/A'}")
+        st.write(f"B.Tech Branch: {student_data.btech_branch}")
+        st.write(f"Interested Field for Masters: {student_data.interested_field_for_masters if student_data.interested_field_for_masters else 'N/A'}")
+
+        try:
+            data = student_data.model_dump()
+            db.clear_table(table_name)
+            db.insert_data(table_name, data, StudentInfo)
+            st.success("Data Saved to Database!")
+        except Exception as e:
+            st.error(f"Error saving the data: {e}")
+            logging.error(f"Error saving the data: {e}")
+

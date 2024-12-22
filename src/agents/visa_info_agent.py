@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import streamlit as st
 
 def load_sample_data(file_path):
     try:
@@ -79,3 +80,4 @@ def visa_checker_page():
                 st.warning(f"No visa types information found for {selected_country}.")
         else:
             st.info(f"No specific visa information found for {selected_country} at the moment.")
+

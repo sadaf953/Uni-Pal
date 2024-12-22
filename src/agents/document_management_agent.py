@@ -3,6 +3,7 @@ from src.models import Document
 from typing import List, Optional
 import logging
 
+
 def manage_documents(student_info=None) -> Optional[List[Document]]:
     """
     Manage and display document requirements for the student.
@@ -67,3 +68,25 @@ def manage_documents(student_info=None) -> Optional[List[Document]]:
     except Exception as e:
          logging.error(f"Error managing documents: {e}")
          return None
+
+
+def document_checker_page():
+    st.title("Document Checklist")
+    student_data = st.session_state.get('student_data')
+    if student_data:
+        documents = manage_documents(student_data)
+        if documents:
+            st.success("Document checklist generated!")
+            for doc in documents:
+                # Use the document id as a unique key for the checkbox
+                checkbox_key = f"doc_checkbox_{doc.id}"
+                is_checked = st.checkbox(f"{doc.name} - {doc.description}", key=checkbox_key, value=(doc.status == "Completed"))
+                if is_checked:
+                    doc.status = "Completed"
+                else:
+                    doc.status = "Pending"
+        else:
+            st.error("Failed to generate document checklist.")
+    else:
+        st.info("Please fill in the Student Information first to generate a personalized document checklist.")
+
