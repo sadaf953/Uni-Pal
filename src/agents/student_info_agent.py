@@ -3,7 +3,7 @@ from src.models import StudentInfo
 import logging
 import re
 from typing import Dict
-from src.database import Database
+from src.json_storage import JsonStorage
 
 
 def is_valid_email(email: str) -> bool:
@@ -104,46 +104,13 @@ def collect_student_info() -> Dict | None:
 
 def student_info_page():
     st.title("Student Information")
-    db = Database()
-    table_name = "student_info"
+    storage = JsonStorage()
 
-    if 'table_created' not in st.session_state:
-        try:
-            db.connect()
-            cursor = db.conn.cursor()
-            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
-            table_exists = cursor.fetchone()
-            if not table_exists:
-                # Define all columns from StudentInfo model
-                columns = {
-                    'name': 'TEXT',
-                    'contact_info': 'TEXT',
-                    'marks_10th': 'INTEGER',
-                    'marks_12th': 'INTEGER',
-                    'btech_cgpa': 'REAL',
-                    'ielts_score': 'REAL',
-                    'toefl_score': 'REAL',
-                    'work_experience': 'TEXT',
-                    'preferred_countries': 'TEXT',  # Will store as JSON string
-                    'btech_branch': 'TEXT',
-                    'interested_field_for_masters': 'TEXT',
-                    'university_urls': 'TEXT',  # Will store as JSON string
-                    'university_details': 'TEXT'  # Will store as JSON string
-                }
-                db.create_table(table_name, columns)
-                logging.info(f"Table {table_name} created.")
-            st.session_state.table_created = True
-        except Exception as e:
-            logging.error(f"Error during table creation: {e}")
-            st.error(f"Error during table creation: {e}")
-        finally:
-            db.close()
-
-    skip_student_info = st.button("Skip Student Info", key="skip_student_info_button") # Added a key
+    skip_student_info = st.button("Skip Student Info", key="skip_student_info_button")
     if skip_student_info:
         st.session_state.skip_student_info = True
 
-    student_data: Optional[StudentInfo] = None
+    student_data: Dict | None = None
     if not st.session_state.get("skip_student_info", False):
         student_data = collect_student_info()
     else:
@@ -164,7 +131,7 @@ def student_info_page():
         }
 
     if student_data:
-        st.session_state.student_data = student_data # Store student data in session state
+        st.session_state.student_data = student_data
         st.success("Form Submitted Successfully!")
         st.subheader("Your Information:")
         if isinstance(student_data, dict):
@@ -180,24 +147,14 @@ def student_info_page():
             st.write(f"Preferred Countries: {', '.join(preferred_countries) if preferred_countries else 'N/A'}")
             st.write(f"B.Tech Branch: {student_data.get('btech_branch', 'N/A')}")
             st.write(f"Interested Field for Masters: {student_data.get('interested_field_for_masters', 'N/A')}")
-        else:
-            st.write(f"Full Name: {student_data.name}")
-            st.write(f"Contact Email/Phone: {student_data.contact_info}")
-            st.write(f"10th Grade Marks/Percentage: {student_data.marks_10th}")
-            st.write(f"12th Grade Marks/Percentage: {student_data.marks_12th}")
-            st.write(f"B.Tech CGPA: {student_data.btech_cgpa}")
-            st.write(f"IELTS Score: {student_data.ielts_score if student_data.ielts_score is not None else 'N/A'}")
-            st.write(f"TOEFL Score: {student_data.toefl_score if student_data.toefl_score is not None else 'N/A'}")
-            st.write(f"Work Experience: {student_data.work_experience if student_data.work_experience else 'N/A'}")
-            st.write(f"Preferred Countries: {', '.join(student_data.preferred_countries) if student_data.preferred_countries else 'N/A'}")
-            st.write(f"B.Tech Branch: {student_data.btech_branch}")
-            st.write(f"Interested Field for Masters: {student_data.interested_field_for_masters if student_data.interested_field_for_masters else 'N/A'}")
 
-        try:
-            data = student_data
-            db.clear_table(table_name)
-            db.insert_data(table_name, data, StudentInfo)
-            st.success("Data Saved to Database!")
-        except Exception as e:
-            st.error(f"Error saving the data: {e}")
-            logging.error(f"Error saving the data: {e}")
+            try:
+                # Clear existing data before saving new data
+                storage.clear_data()
+                if storage.update_student_info(student_data, replace_existing=True):
+                    st.success("Data saved successfully!")
+                else:
+                    st.error("Failed to save data")
+            except Exception as e:
+                st.error(f"Error saving the data: {e}")
+                logging.error(f"Error saving the data: {e}")

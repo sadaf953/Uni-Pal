@@ -1,0 +1,21 @@
+{
+    "students": {
+        "test@example.com": {
+            "name": "Test User",
+            "contact_info": "test@example.com",
+            "marks_10th": 90,
+            "marks_12th": 92,
+            "btech_cgpa": 8.5,
+            "ielts_score": 7.0,
+            "toefl_score": 100,
+            "work_experience": "2 years",
+            "preferred_countries": [
+                "USA"
+            ],
+            "btech_branch": "Computer Science",
+            "interested_field_for_masters": "Computer Science",
+            "university_urls": {},
+            "university_details": []
+        }
+    }
+}
