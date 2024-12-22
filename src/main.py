@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 
 # Get the absolute path of the project root
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -10,20 +9,18 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import streamlit as st
-from src.agents.student_info_agent import collect_student_info, student_info_page
-
-from src.config import settings
-from src.models import StudentInfo
-from src.graph_workflow import get_workflow
+from agents.student_info_agent import student_info_page
+from config import settings
+from models import StudentInfo
+from graph_workflow import get_workflow
 import logging
 from typing import Optional
-from src.agents.visa_info_agent import visa_checker_page
-from src.agents.document_management_agent import  document_checker_page
-from src.agents.university_recommendation_agent import scraping_testing_page
+from agents.visa_info_agent import visa_checker_page
+from agents.document_management_agent import document_checker_page
+from agents.university_recommendation_agent import scraping_testing_page
 
 settings.LLM_PROVIDER = "groq"
 logging.info(f"LLM_PROVIDER set to : {settings.LLM_PROVIDER}")
-
 
 
 def main():

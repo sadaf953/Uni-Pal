@@ -1,8 +1,11 @@
 import json
+import logging
 import streamlit as st
-from src.llm_interface import query_llm
-from src.utils import scrape_website, extract_content_with_ai, search_web, clean_search_results
-from src.travily_search import travily_search  # Import the travily_search function
+from utils import scrape_website, extract_content_with_ai, clean_search_results
+from llm_interface import query_llm
+from travily_search import travily_search
+from config import settings
+from graph_workflow import get_workflow
 
 def save_raw_results(data):
     with open('raw_results.json', 'w') as f:
@@ -93,11 +96,15 @@ def scraping_testing_page():
                         st.success("Search complete. Found links:")
                         for link in search_results:
                             st.write(link)
-                        else:
-                            st.info("No relevant links found.")
+                    else:
+                        st.info("No relevant links found.")
                 else:
                     st.error("Travily API key is not configured. Please check your settings.")
         else:
             st.warning("Please enter text to search for links.")
 
+    if st.button("Activate Visa Checker"):
+        st.session_state.current_page = "visa_checker"
 
+    if st.button("Activate Document Checker"):
+        st.session_state.current_page = "document_checker"

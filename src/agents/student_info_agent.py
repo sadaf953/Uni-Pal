@@ -27,7 +27,7 @@ def collect_student_info() -> Dict | None:
     Collects student information using a Streamlit form.
 
     Returns:
-        StudentInfo: An object containing the collected student information, or None if the form is not submitted.
+        Dict: A dictionary containing the collected student information, or None if the form is not submitted.
     """
     with st.form("student_form"):
         st.header("Student Information")
@@ -71,46 +71,35 @@ def collect_student_info() -> Dict | None:
 
             # Validate email or phone
             if "@" in contact_info:
-               if not is_valid_email(contact_info):
+                if not is_valid_email(contact_info):
                     st.error("Please enter a valid email address.")
                     return None
             elif not is_valid_phone_number(contact_info):
-                    st.error("Please enter a valid phone number (only digits).")
-                    return None
+                st.error("Please enter a valid phone number (only digits).")
+                return None
             
             try:
-                 student_info = StudentInfo(
-                    name=name,
-                    contact_info=contact_info,
-                    marks_10th=marks_10th,
-                    marks_12th=marks_12th,
-                    btech_cgpa=btech_cgpa,
-                    ielts_score=float(ielts_score) if ielts_score else None,
-                    toefl_score=float(toefl_score) if toefl_score else None,
-                    work_experience=work_experience,
-                    preferred_countries=preferred_countries,
-                    btech_branch=btech_branch,
-                    interested_field_for_masters=interested_field_for_masters,
-                )
-                 return {"student_info":student_info}
+                return {
+                    'name': name,
+                    'contact_info': contact_info,
+                    'marks_10th': int(marks_10th) if marks_10th is not None else 0,
+                    'marks_12th': int(marks_12th) if marks_12th is not None else 0,
+                    'btech_cgpa': float(btech_cgpa) if btech_cgpa is not None else 0.0,
+                    'ielts_score': float(ielts_score) if ielts_score is not None else None,
+                    'toefl_score': int(toefl_score) if toefl_score is not None else None,
+                    'work_experience': work_experience,
+                    'preferred_countries': preferred_countries,
+                    'btech_branch': btech_branch,
+                    'interested_field_for_masters': interested_field_for_masters,
+                    'university_urls': {},
+                    'university_details': []
+                }
             except Exception as e:
-                logging.error(f"Error creating student info object: {e}")
-                st.error(f"Error creating student info object: {e}")
+                logging.error(f"Error creating student info dictionary: {e}")
+                st.error(f"Error creating student info dictionary: {e}")
                 return None
 
-    return {"student_info": StudentInfo(
-           name="Test User",
-           contact_info="test@example.com",
-           marks_10th=90,
-           marks_12th=92,
-           btech_cgpa=8.5,
-           ielts_score=7.0,
-           toefl_score=100,
-           work_experience="2 years",
-           preferred_countries=["USA"],
-           btech_branch="Computer Science",
-           interested_field_for_masters="Computer Science"
-       )}
+    return None
 
 
 def student_info_page():
@@ -125,8 +114,23 @@ def student_info_page():
             cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
             table_exists = cursor.fetchone()
             if not table_exists:
-                columns = StudentInfo.model_fields
-                db.create_table(table_name, columns={key: "TEXT" for key in columns})
+                # Define all columns from StudentInfo model
+                columns = {
+                    'name': 'TEXT',
+                    'contact_info': 'TEXT',
+                    'marks_10th': 'INTEGER',
+                    'marks_12th': 'INTEGER',
+                    'btech_cgpa': 'REAL',
+                    'ielts_score': 'REAL',
+                    'toefl_score': 'REAL',
+                    'work_experience': 'TEXT',
+                    'preferred_countries': 'TEXT',  # Will store as JSON string
+                    'btech_branch': 'TEXT',
+                    'interested_field_for_masters': 'TEXT',
+                    'university_urls': 'TEXT',  # Will store as JSON string
+                    'university_details': 'TEXT'  # Will store as JSON string
+                }
+                db.create_table(table_name, columns)
                 logging.info(f"Table {table_name} created.")
             st.session_state.table_created = True
         except Exception as e:
@@ -143,42 +147,57 @@ def student_info_page():
     if not st.session_state.get("skip_student_info", False):
         student_data = collect_student_info()
     else:
-        student_data = StudentInfo(
-            name="Test User",
-            contact_info="test@example.com",
-            marks_10th=90,
-            marks_12th=92,
-            btech_cgpa=8.5,
-            ielts_score=7.0,
-            toefl_score=100,
-            work_experience="2 years",
-            preferred_countries=["USA"],
-            btech_branch="Computer Science",
-            interested_field_for_masters="Computer Science"
-        )
+        student_data = {
+            'name': "Test User",
+            'contact_info': "test@example.com",
+            'marks_10th': 90,
+            'marks_12th': 92,
+            'btech_cgpa': 8.5,
+            'ielts_score': 7.0,
+            'toefl_score': 100,
+            'work_experience': "2 years",
+            'preferred_countries': ["USA"],
+            'btech_branch': "Computer Science",
+            'interested_field_for_masters': "Computer Science",
+            'university_urls': {},
+            'university_details': []
+        }
 
     if student_data:
         st.session_state.student_data = student_data # Store student data in session state
         st.success("Form Submitted Successfully!")
         st.subheader("Your Information:")
-        st.write(f"Full Name: {student_data.name}")
-        st.write(f"Contact Email/Phone: {student_data.contact_info}")
-        st.write(f"10th Grade Marks/Percentage: {student_data.marks_10th}")
-        st.write(f"12th Grade Marks/Percentage: {student_data.marks_12th}")
-        st.write(f"B.Tech CGPA: {student_data.btech_cgpa}")
-        st.write(f"IELTS Score: {student_data.ielts_score if student_data.ielts_score is not None else 'N/A'}")
-        st.write(f"TOEFL Score: {student_data.toefl_score if student_data.toefl_score is not None else 'N/A'}")
-        st.write(f"Work Experience: {student_data.work_experience if student_data.work_experience else 'N/A'}")
-        st.write(f"Preferred Countries: {', '.join(student_data.preferred_countries) if student_data.preferred_countries else 'N/A'}")
-        st.write(f"B.Tech Branch: {student_data.btech_branch}")
-        st.write(f"Interested Field for Masters: {student_data.interested_field_for_masters if student_data.interested_field_for_masters else 'N/A'}")
+        if isinstance(student_data, dict):
+            st.write(f"Full Name: {student_data.get('name', 'N/A')}")
+            st.write(f"Contact Email/Phone: {student_data.get('contact_info', 'N/A')}")
+            st.write(f"10th Grade Marks/Percentage: {student_data.get('marks_10th', 'N/A')}")
+            st.write(f"12th Grade Marks/Percentage: {student_data.get('marks_12th', 'N/A')}")
+            st.write(f"B.Tech CGPA: {student_data.get('btech_cgpa', 'N/A')}")
+            st.write(f"IELTS Score: {student_data.get('ielts_score', 'N/A')}")
+            st.write(f"TOEFL Score: {student_data.get('toefl_score', 'N/A')}")
+            st.write(f"Work Experience: {student_data.get('work_experience', 'N/A')}")
+            preferred_countries = student_data.get('preferred_countries', [])
+            st.write(f"Preferred Countries: {', '.join(preferred_countries) if preferred_countries else 'N/A'}")
+            st.write(f"B.Tech Branch: {student_data.get('btech_branch', 'N/A')}")
+            st.write(f"Interested Field for Masters: {student_data.get('interested_field_for_masters', 'N/A')}")
+        else:
+            st.write(f"Full Name: {student_data.name}")
+            st.write(f"Contact Email/Phone: {student_data.contact_info}")
+            st.write(f"10th Grade Marks/Percentage: {student_data.marks_10th}")
+            st.write(f"12th Grade Marks/Percentage: {student_data.marks_12th}")
+            st.write(f"B.Tech CGPA: {student_data.btech_cgpa}")
+            st.write(f"IELTS Score: {student_data.ielts_score if student_data.ielts_score is not None else 'N/A'}")
+            st.write(f"TOEFL Score: {student_data.toefl_score if student_data.toefl_score is not None else 'N/A'}")
+            st.write(f"Work Experience: {student_data.work_experience if student_data.work_experience else 'N/A'}")
+            st.write(f"Preferred Countries: {', '.join(student_data.preferred_countries) if student_data.preferred_countries else 'N/A'}")
+            st.write(f"B.Tech Branch: {student_data.btech_branch}")
+            st.write(f"Interested Field for Masters: {student_data.interested_field_for_masters if student_data.interested_field_for_masters else 'N/A'}")
 
         try:
-            data = student_data.model_dump()
+            data = student_data
             db.clear_table(table_name)
             db.insert_data(table_name, data, StudentInfo)
             st.success("Data Saved to Database!")
         except Exception as e:
             st.error(f"Error saving the data: {e}")
             logging.error(f"Error saving the data: {e}")
-

@@ -207,11 +207,6 @@ def load_sample_data(file_path: str) -> dict:
 
 
 
-    
-
-
-
-
 def clean_search_results(state: Dict) -> Dict:
     """
     Convert raw web search results and scraped content into clean markdown format.
