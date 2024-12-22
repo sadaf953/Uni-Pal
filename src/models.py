@@ -35,14 +35,6 @@ class University(BaseModel):
     scholarship_options: Optional[str] = None
 
 
-class VisaInfo(BaseModel):
-    """
-    Model for visa information.
-    """
-    country: str
-    requirements: List[str]
-    fees: str
-    currency: str
 
 class ScholarshipInfo(BaseModel):
   """
@@ -62,3 +54,33 @@ class Document(BaseModel):
     status: str  # pending, in_progress, completed
     description: Optional[str] = None
     required: bool = True
+
+class ProcessingTime(BaseModel):
+    range: Optional[str] = None
+    notes: Optional[str] = None
+
+class FinancialRequirements(BaseModel):
+    bank_balance_months: Optional[int] = None
+    estimated_cost_of_attendance_usd: Optional[int] = None
+    monthly_living_costs_outside_london_gbp: Optional[int] = None
+    annual_living_costs_aud: Optional[int] = None
+    proof_of_funds_required: Optional[bool] = None
+    notes: Optional[str] = None
+
+class LoanProcess(BaseModel):
+    loan_acceptance_allowed: Optional[bool] = None
+    required_documents_summary: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+class VisaType(BaseModel):
+    type: str
+    processing_time_months: Optional[ProcessingTime] = None
+    financial_requirements: Optional[FinancialRequirements] = None
+    loan_process: Optional[LoanProcess] = None
+    additional_requirements: Optional[List[str]] = None
+
+class VisaInfo(BaseModel):
+    country: str
+    visa_types: List[VisaType]
+
+

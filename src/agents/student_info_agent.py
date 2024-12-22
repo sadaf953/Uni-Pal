@@ -2,6 +2,7 @@ import streamlit as st
 from src.models import StudentInfo
 import logging
 import re
+from typing import Dict
 
 def is_valid_email(email: str) -> bool:
     """
@@ -19,7 +20,7 @@ def is_valid_phone_number(phone: str) -> bool:
     return re.match(phone_regex, phone) is not None
 
 
-def collect_student_info() -> StudentInfo | None:
+def collect_student_info() -> Dict | None:
     """
     Collects student information using a Streamlit form.
 
@@ -89,10 +90,22 @@ def collect_student_info() -> StudentInfo | None:
                     btech_branch=btech_branch,
                     interested_field_for_masters=interested_field_for_masters,
                 )
-                 return student_info
+                 return {"student_info":student_info}
             except Exception as e:
                 logging.error(f"Error creating student info object: {e}")
                 st.error(f"Error creating student info object: {e}")
                 return None
 
-    return None
+    return {"student_info": StudentInfo(
+           name="Test User",
+           contact_info="test@example.com",
+           marks_10th=90,
+           marks_12th=92,
+           btech_cgpa=8.5,
+           ielts_score=7.0,
+           toefl_score=100,
+           work_experience="2 years",
+           preferred_countries=["USA"],
+           btech_branch="Computer Science",
+           interested_field_for_masters="Computer Science"
+       )}

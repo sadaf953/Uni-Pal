@@ -16,6 +16,7 @@ class Settings:
     DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite")
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq") # set groq as default LLM, use 'ollama' for local ollama
     LLM_MODEL = os.getenv("LLM_MODEL", "mixtral-8x7b-32768") #set default model
+    TRAVILY_API_KEY=os.getenv("TRAVILY_API_KEY")
     
 
     def __init__(self):

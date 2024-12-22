@@ -1,0 +1,113 @@
+[
+    {
+      "country": "USA",
+      "application_from": "India",
+      "visa_types": [
+        {
+          "type": "F1 Student Visa",
+          "processing_time_months": {
+            "range": "2-6",
+            "notes": "Can vary significantly based on embassy workload and time of year."
+          },
+          "financial_requirements": {
+            "bank_balance_months": 12,
+            "estimated_cost_of_attendance_usd": 40000,
+            "proof_of_funds_required": true,
+            "notes": "Must show sufficient funds to cover tuition, living expenses, and other costs for the first year of study. May need to show evidence of funding for subsequent years."
+          },
+          "loan_process": {
+            "loan_acceptance_allowed": true,
+            "required_documents_summary": [
+              "Loan sanction letter",
+              "Details of collateral (if applicable)",
+              "Repayment schedule"
+            ],
+            "notes": "Education loans from recognized banks are generally accepted as proof of funds. Ensure the loan covers the estimated cost of attendance."
+          },
+          "additional_requirements": [
+            "Valid passport",
+            "Acceptance letter from a SEVP-certified school",
+            "DS-160 application form",
+            "Visa interview",
+            "SEVIS fee payment"
+          ]
+        }
+        
+      ]
+    },
+    {
+      "country": "UK",
+      "application_from": "India",
+      "visa_types": [
+        {
+          "type": "Student Visa",
+          "processing_time_months": {
+            "range": "3-8",
+            "notes": "Processing times can fluctuate. Apply well in advance."
+          },
+          "financial_requirements": {
+            "bank_balance_months": 9,
+            "monthly_living_costs_outside_london_gbp": 1023,
+            "monthly_living_costs_in_london_gbp": 1334,
+            "proof_of_funds_required": true,
+            "notes": "Must show funds to cover course fees for the first year and living expenses for up to 9 months."
+          },
+          "loan_process": {
+            "loan_acceptance_allowed": true,
+            "required_documents_summary": [
+              "Loan sanction letter",
+              "Proof of the loan being approved and available",
+              "Confirmation that the loan is specifically for education"
+            ],
+            "notes": "Loans must be from banks regulated by the home regulator (e.g., RBI in India)."
+          },
+          "additional_requirements": [
+            "Confirmation of Acceptance for Studies (CAS) from a licensed sponsor",
+            "Valid passport",
+            "Online application form",
+            "Tuberculosis test (if required)",
+            "Financial documents"
+          ]
+        }
+        
+      ]
+    },
+    {
+      "country": "Australia",
+      "application_from": "India",
+      "visa_types": [
+        {
+          "type": "Subclass 500 (Student) visa",
+          "processing_time_months": {
+            "range": "1-4",
+            "notes": "Highly dependent on the stream and individual circumstances."
+          },
+          "financial_requirements": {
+            "bank_balance_months": 12,
+            "annual_living_costs_aud": 24505,
+            "travel_costs_aud": 3000,
+            "proof_of_funds_required": true,
+            "notes": "Need to demonstrate funds to cover the first year's living costs, travel costs, and course fees. Evidence of funds for subsequent years may be required."
+          },
+          "loan_process": {
+            "loan_acceptance_allowed": true,
+            "required_documents_summary": [
+              "Loan approval letter",
+              "Details of the loan amount and tenure",
+              "Confirmation of the loan provider"
+            ],
+            "notes": "Loans from recognized financial institutions are generally acceptable. Ensure the loan amount is sufficient."
+          },
+          "additional_requirements": [
+            "Confirmation of Enrolment (CoE)",
+            "Genuine Temporary Entrant (GTE) requirement",
+            "Valid passport",
+            "Visa application form",
+            "Financial capacity evidence",
+            "English language proficiency proof"
+          ]
+        }
+        
+      ]
+    }
+  ]
