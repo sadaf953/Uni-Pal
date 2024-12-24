@@ -103,8 +103,4 @@ def scraping_testing_page():
         else:
             st.warning("Please enter text to search for links.")
 
-    if st.button("Activate Visa Checker"):
-        st.session_state.current_page = "visa_checker"
-
-    if st.button("Activate Document Checker"):
-        st.session_state.current_page = "document_checker"
+   

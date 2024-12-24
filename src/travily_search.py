@@ -3,6 +3,9 @@ import requests
 from src.config import settings
 from src.utils import safe_log
 from typing import List
+from tavily import TavilyClient
+from typing import List, Dict
+import os
 
 def travily_search(search_query: str, api_key: str, count: int = 5) -> List[str]:
     """
@@ -82,3 +85,52 @@ def travily_search_tool():
                 st.write(url)
         elif st.button("Search") and search_query:  # Display message only after a search attempt with a query
             st.info("No results found for your query.")
+
+
+def perform_web_search(state: Dict) -> Dict:
+    """
+    Perform web search using Tavily for each generated query.
+    
+    Args:
+        state (Dict): The current state containing search queries
+    
+    Returns:
+        Dict: Updated state with search results
+    """
+    queries = state.get("search_queries")
+    if not queries:
+        raise ValueError("No search queries found in state")
+
+    # Initialize Tavily client
+    tavily_api_key = os.getenv("TAVILY_API_KEY")
+    if not tavily_api_key:
+        raise ValueError("TAVILY_API_KEY not found in environment variables")
+    
+    client = TavilyClient(api_key=tavily_api_key)
+    
+    # Store results for each query
+    search_results = {}
+    
+    try:
+        for query in queries:
+            # Perform search with Tavily
+            result = client.search(query, search_depth="advanced")
+            
+            # Extract and format the results
+            formatted_results = []
+            for item in result.get('results', []):
+                result_item = {
+                    'title': item.get('title', 'Untitled'),
+                    'url': item.get('url', ''),
+                    'content': item.get('content', '')
+                }
+                formatted_results.append(result_item)
+            search_results[query] = formatted_results
+        
+        # Update state with search results
+        state["web_search_results"] = search_results
+        
+    except Exception as e:
+        raise ValueError(f"Error performing web search: {str(e)}")
+    
+    return state
