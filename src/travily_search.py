@@ -1,7 +1,5 @@
 import streamlit as st
-import requests
 from src.config import settings
-from src.utils import safe_log
 from typing import List
 from tavily import TavilyClient
 from typing import List, Dict
@@ -9,7 +7,7 @@ import os
 
 def travily_search(search_query: str, api_key: str, count: int = 5) -> List[str]:
     """
-    Performs a web search using the Travily API and returns a list of URLs.
+    Performs a web search using the Tavily API and returns a list of URLs.
 
     Args:
         search_query (str): The search query string.
@@ -19,41 +17,13 @@ def travily_search(search_query: str, api_key: str, count: int = 5) -> List[str]
     Returns:
         List[str]: A list of URLs from the search results.
     """
-    headers = {
-        "X-API-KEY": api_key,
-        "Content-Type": "application/json",
-    }
-    payload = {"q": search_query, "count": count}
     try:
-        response = requests.post("https://api.travily.ai/search", headers=headers, json=payload)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        data = response.json()
-        safe_log(f"Travily API Response: {data}")  # Log the raw response for debugging
-        urls = [result.get("link") for result in data.get("organic", []) if result.get("link")]
+        client = TavilyClient(api_key=api_key)
+        response = client.search(search_query, search_depth="normal")  # Or "advanced" for more details
+        urls = [item['url'] for item in response['results'][:count] if 'url' in item]
         return urls
-    except requests.exceptions.HTTPError as http_err:
-        safe_log(f"HTTP error during Travily search: {http_err}")
-        st.error(f"HTTP error during search: {http_err}")
-        return []
-    except requests.exceptions.ConnectionError as conn_err:
-        safe_log(f"Connection error during Travily search: {conn_err}")
-        st.error(f"Connection error during search. Please check your internet connection.")
-        return []
-    except requests.exceptions.Timeout as timeout_err:
-        safe_log(f"Timeout error during Travily search: {timeout_err}")
-        st.error("Search timed out. Please try again later.")
-        return []
-    except requests.exceptions.RequestException as e:
-        safe_log(f"Error during Travily search: {e}")
-        st.error(f"Error during search: {e}")
-        return []
-    except ValueError as e:  # Catch JSONDecodeError which is a subclass of ValueError
-        safe_log(f"Error parsing Travily response: Invalid JSON - {e}")
-        st.error(f"Error processing search results: The API returned an unexpected format.")
-        return []
     except Exception as e:
-        safe_log(f"Unexpected error processing Travily response: {e}")
-        st.error(f"An unexpected error occurred while processing search results: {e}")
+        st.error(f"Error during Tavily search: {e}")
         return []
 
 def travily_search_tool():
@@ -70,9 +40,10 @@ def travily_search_tool():
             api_key = settings.TRAVILY_API_KEY
             if api_key:
                 with st.spinner("Searching..."):
-                    st.session_state.travily_results = travily_search(
+                    results = travily_search(
                         search_query, api_key, count=num_results
                     )
+                    st.session_state.travily_results = results
             else:
                 st.error("Travily API key is not configured. Please check your settings.")
         else:
@@ -83,54 +54,36 @@ def travily_search_tool():
             st.subheader("Search Results:")
             for url in st.session_state.travily_results:
                 st.write(url)
-        elif st.button("Search") and search_query:  # Display message only after a search attempt with a query
+        elif st.button("Search") and search_query:
             st.info("No results found for your query.")
-
 
 def perform_web_search(state: Dict) -> Dict:
     """
-    Perform web search using Tavily for each generated query.
-    
+    Perform web search using Tavily for each generated query and return only URLs.
+
     Args:
         state (Dict): The current state containing search queries
-    
+
     Returns:
-        Dict: Updated state with search results
+        Dict: Updated state with search results (only URLs)
     """
     queries = state.get("search_queries")
     if not queries:
         raise ValueError("No search queries found in state")
 
-    # Initialize Tavily client
-    tavily_api_key = os.getenv("TAVILY_API_KEY")
+    tavily_api_key = settings.TRAVILY_API_KEY
     if not tavily_api_key:
-        raise ValueError("TAVILY_API_KEY not found in environment variables")
-    
-    client = TavilyClient(api_key=tavily_api_key)
-    
-    # Store results for each query
+        raise ValueError("TAVILY_API_KEY not found in settings")
+
     search_results = {}
-    
     try:
+        client = TavilyClient(api_key=tavily_api_key)
         for query in queries:
-            # Perform search with Tavily
-            result = client.search(query, search_depth="advanced")
-            
-            # Extract and format the results
-            formatted_results = []
-            for item in result.get('results', []):
-                result_item = {
-                    'title': item.get('title', 'Untitled'),
-                    'url': item.get('url', ''),
-                    'content': item.get('content', '')
-                }
-                formatted_results.append(result_item)
-            search_results[query] = formatted_results
-        
-        # Update state with search results
+            response = client.search(query, search_depth="normal")
+            urls = [item['url'] for item in response['results']]
+            search_results[query] = urls
         state["web_search_results"] = search_results
-        
     except Exception as e:
         raise ValueError(f"Error performing web search: {str(e)}")
-    
+
     return state
