@@ -305,18 +305,11 @@ def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
         Limit your response to around 1000 words.
         """
         
-        # Use Gemini model for extraction with longer timeout
-        messages = [
-            SystemMessage(content="You are an expert at extracting and structuring relevant information from web content. Be concise and focus on key points."),
-            HumanMessage(content=prompt)
-        ]
-        
         # Add a small delay before making the API call
         time.sleep(3)  # Increased delay between API calls
         
-        # Use Gemini model for extraction
-        response = Gemini_Exp1206.invoke(messages)
-        content = response.content if hasattr(response, 'content') else str(response)
+        # Use configured LLM for extraction
+        content = query_llm(prompt)
         
         return {
             "extracted_content": content,
@@ -329,6 +322,3 @@ def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
             time.sleep(5)  # Add extra delay on rate limit
             raise Exception("API rate limit reached. Please wait a moment before trying again.")
         raise Exception(f"Error during AI extraction: {str(e)}")
-
-
-

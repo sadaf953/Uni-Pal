@@ -16,7 +16,6 @@ except ImportError:
     logging.warning("ChatGroq not available. Please update Langchain or use Groq")
 
 
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -36,10 +35,20 @@ class LLMs:
 
 
         # Initialize models with API keys
-        self.mixtral8x7b = ChatGroq(
-            model=self.mixtral8x7b,
-            temperature=0.4,
+        if settings.GROQ_API_KEY:
+            self.mixtral8x7b = ChatGroq(
+                groq_api_key=settings.GROQ_API_KEY,
+                model=self.mixtral8x7b,
+                temperature=0.4,
             )# type: ignore
+            
+            self.llama70b = ChatGroq(
+                groq_api_key=settings.GROQ_API_KEY,
+                model=self.llama70b,
+                temperature=0.4,
+            )# type: ignore
+        else:
+            logging.error("GROQ_API_KEY not found in settings")
 
         self.gemini_flash = ChatGoogleGenerativeAI(
             model=self.gemini_flash,
@@ -60,10 +69,6 @@ class LLMs:
             model=self.gemini_2_flash,
             temperature=0.1,
         )
-        self.llama70b = ChatGroq(
-            model=self.llama70b,
-            temperature=0.4,
-        )# type: ignore
 
 model = LLMs()
 Mixtral8x7b = model.mixtral8x7b
@@ -102,25 +107,7 @@ def testing_llms():
 
 
 
-def get_llm():
-    """
-    Initializes and returns the specified LLM.
-    """
-    try:
-        if not HAS_GROQ:
-           logging.error("ChatGroq is not available. Please update Langchain or use Groq")
-           return None
-        if settings.LLM_PROVIDER == "groq":
-            if settings.GROQ_API_KEY is None:
-                logging.error("GROQ_API_KEY not found in environment variables")
-                return None
-            return ChatGroq(api_key=settings.GROQ_API_KEY, model=settings.LLM_MODEL)
-        else:
-            logging.error(f"LLM Provider {settings.LLM_PROVIDER} not supported")
-            return None
-    except Exception as e:
-        logging.error(f"Error initializing LLM: {e}")
-        return None
+
 
 
 def create_prompt(prompt: str) -> HumanMessage:
@@ -134,7 +121,7 @@ def query_llm(prompt: str) -> str:
     """
     Queries the LLM with the given prompt and returns the response.
     """
-    llm = get_llm()
+    llm = Mixtral8x7b  # Use Mixtral8x7b (Groq) instead of Gemini
     if llm is None:
         return "Error: LLM not initialized."
     try:
@@ -144,3 +131,31 @@ def query_llm(prompt: str) -> str:
     except Exception as e:
         logging.error(f"Error querying LLM: {e}")
         return f"Error: LLM query failed: {e}"
+
+def test_groq_directly():
+    """Test Groq client directly without Langchain"""
+    try:
+        from groq import Groq
+        
+        print("Testing Groq client directly...")
+        print(f"GROQ_API_KEY exists: {settings.GROQ_API_KEY is not None}")
+        print(f"GROQ_API_KEY starts with: {settings.GROQ_API_KEY[:10] if settings.GROQ_API_KEY else 'None'}")
+        
+        client = Groq(api_key=settings.GROQ_API_KEY)
+        print("Groq client created, attempting completion...")
+        
+        # Try a simple completion
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": "Say hello!"}],
+            model="mixtral-8x7b-32768",
+        )
+        print(f"Groq response: {chat_completion.choices[0].message.content}")
+        return True
+    except Exception as e:
+        print(f"Direct Groq test failed: {str(e)}")
+        return False
+
+if __name__ == "__main__":
+    print("Starting Groq test...")
+    test_groq_directly()
+    print("Test complete.")

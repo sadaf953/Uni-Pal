@@ -12,6 +12,7 @@ class Settings:
     OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
     SERP_API_KEY = os.getenv("SERP_API_KEY")
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # Add this for Gemini
     DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'unipal.db'))}")
     DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite")
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq") # set groq as default LLM, use 'ollama' for local ollama
@@ -20,10 +21,10 @@ class Settings:
     
 
     def __init__(self):
-      logging.info(f"Loaded environment variables: {os.environ}")
-      logging.info(f"GROQ_API_KEY is: {self.GROQ_API_KEY}")
-      logging.info(f"LLM_PROVIDER is: {self.LLM_PROVIDER}")
-
+        logging.info(f"Loaded environment variables: {os.environ}")
+        logging.info(f"GROQ_API_KEY is: {self.GROQ_API_KEY}")
+        logging.info(f"GOOGLE_API_KEY is: {self.GOOGLE_API_KEY}")  # Add logging for Google API key
+        logging.info(f"LLM_PROVIDER is: {self.LLM_PROVIDER}")
 
 
 settings = Settings()
