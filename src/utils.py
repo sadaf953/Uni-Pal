@@ -1,18 +1,31 @@
-import json
+import os
+import csv
 import logging
-import time
-from datetime import datetime
-from typing import List, Dict
-from langchain.schema import HumanMessage, SystemMessage
-from src.llm_interface import Gemini_Exp1206
 import requests
+from dotenv import load_dotenv
+from typing import List, Dict
+
+# LLM and web scraping imports
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from langchain.schema import HumanMessage, SystemMessage
+from langchain.prompts import PromptTemplate
+from tavily import TavilyClient
+
+# Local imports
 from src.config import settings
-from src.llm_interface import query_llm
+from src.llm_interface import Gemini_Exp1206, query_llm
+import streamlit as st
 
+# Load environment variables
+load_dotenv()
 
+# API credentials
+API_KEY = settings.API_KEY
+CX_CODE = settings.CX_CODE
+
+UNWANTED_PATTERNS = ['blogs.lse.ac']
+relevant_keywords = ['master', 'ms', 'graduate',]
 
 def setup_requests_session() -> requests.Session:
     """
@@ -135,57 +148,8 @@ def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
         logging.error(f"Error in AI extraction: {str(e)}")
         return {"extracted_content": "", "error": str(e)}
 
-def search_web(query: str) -> List[Dict[str, str]]:
-    """
-    Search the web using Google Search API with domain filtering.
-    
-    Args:
-        query (str): Search query string
-        
-    Returns:
-        List[Dict[str, str]]: List of search results with titles and links
-    """
-    serp_api_key = settings.SERP_API_KEY
-    if not serp_api_key:
-        logging.error("SERP_API_KEY not found")
-        return []
 
-    try:
-        url = "https://serpapi.com/search"
-        params = {
-            "engine": "google",
-            "q": query,
-            "api_key": serp_api_key,
-            "num": 5,
-            "timeout": 15
-        }
-
-        session = setup_requests_session()
-        response = session.get(url, params=params, timeout=15)
-        response.raise_for_status()
-        results = response.json()
-
-        search_results = []
-        if "organic_results" in results:
-            allowed_domains = load_allowed_domains()
-            for result in results["organic_results"]:
-                 if is_allowed_domain(result.get('link', ''), allowed_domains):
-                    search_results.append({
-                        "title": result.get("title", ""),
-                        "link": result.get("link", "")
-                    })
-
-        return search_results
-
-    except requests.RequestException as e:
-        logging.error(f"Search API error: {str(e)}")
-        return []
-    except Exception as e:
-        logging.error(f"Unexpected error in search: {str(e)}")
-        return []
-
-
-
+            
 
 def load_sample_data(file_path: str) -> dict:
     """
@@ -322,3 +286,165 @@ def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
             time.sleep(5)  # Add extra delay on rate limit
             raise Exception("API rate limit reached. Please wait a moment before trying again.")
         raise Exception(f"Error during AI extraction: {str(e)}")
+
+
+
+def save_links_to_csv(links):
+    """
+    Saves all university links to a CSV file.
+    
+    Args:
+        links (list): A list of URLs to save.
+    """
+    try:
+        # Log total number of links
+        print(f"Total links: {len(links)}")
+        
+        # Ensure the file is saved in the project root
+        csv_path = os.path.join(os.path.dirname(__file__), '..', 'university.csv')
+        
+        # Open the file in write mode, creating it if it doesn't exist
+        with open(csv_path, 'w', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            for link in links:
+                writer.writerow([link])
+        
+        print(f"Saved {len(links)} links to {csv_path}")
+    
+    except Exception as e:
+        print(f"Error saving links to CSV: {e}")
+
+
+
+def search_universities(query, start=1):
+    url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={API_KEY}&cx={CX_CODE}&start={start}"
+    response = requests.get(url)
+    results = response.json()
+    
+    items = []
+    if 'items' in results:
+        for item in results['items']:
+            title = item.get('title', 'No title available')
+            snippet = item.get('snippet', '')
+            link = item.get('link', '')
+            
+            # Check if the link contains any unwanted patterns
+            if not any(pattern in link for pattern in UNWANTED_PATTERNS):
+                items.append((title, snippet, link))
+    
+    next_page = results.get('queries', {}).get('nextPage', [])
+    return items, next_page
+
+
+
+def build_query(program_field, countries):
+    base_query = "top universities offering MSC in {} {}"
+    queries = [base_query.format(program_field, country) for country in countries]
+    return " OR ".join(queries)
+
+
+def fetch_page_metadata(url):
+    """Fetch page title and meta description for classification."""
+    try:
+        response = requests.get(url, timeout=10)
+        
+        # Check for non-200 status codes
+        if response.status_code != 200:
+            return f"Status {response.status_code}", "No description"
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        title = soup.title.string if soup.title else 'No Title'
+        description = soup.find('meta', attrs={'name': 'description'})
+        description_content = description['content'] if description else 'No Description'
+        return title, description_content
+    except Exception as e:
+        return 'Error', str(e)
+
+
+def classify_with_llm(title, description, url):
+    """Classify the URL using simple heuristics."""
+    # Check for program-specific keywords
+    program_keywords = ['msc', 'master', 'graduate', 'postgraduate', 'course', 'degree', 'program']
+    ai_keywords = ['artificial intelligence', 'ai', 'machine learning', 'data science', 'computer science']
+    
+    # Convert to lowercase for case-insensitive matching
+    title_lower = title.lower()
+    description_lower = description.lower()
+    url_lower = url.lower()
+    
+    # Special handling for error cases
+    if 'status' in title_lower or 'error' in title_lower:
+        return 'Other'
+    
+    # Check if it's a direct program page
+    is_program_page = (
+        any(keyword in title_lower for keyword in program_keywords) and
+        any(keyword in title_lower or keyword in description_lower for keyword in ai_keywords)
+    )
+    
+    # Check if it's a university homepage
+    is_university_homepage = (
+        'university' in url_lower or 
+        'ac.uk' in url_lower or 
+        'edu' in url_lower
+    ) and not is_program_page
+    
+    # Classify
+    if is_program_page:
+        return 'Direct Program Page'
+    elif is_university_homepage:
+        return 'University Homepage'
+    else:
+        return 'Other'
+
+
+def clean_description(description):
+    """Clean up description by removing unnecessary text."""
+    # Remove common unnecessary phrases
+    unnecessary_phrases = [
+        'forbidden', 'no description', 'university homepage', 
+        'learn more', 'click here', 'find out more'
+    ]
+    
+    # Convert to lowercase for case-insensitive matching
+    cleaned = description.lower()
+    
+    # Remove unnecessary phrases
+    for phrase in unnecessary_phrases:
+        cleaned = cleaned.replace(phrase, '').strip()
+    
+    # Capitalize first letter and return
+    return cleaned.capitalize() if cleaned else 'No description'
+
+
+def process_csv(input_file, output_file):
+    """Process URLs from a simple list CSV file."""
+    results = []
+    with open(input_file, 'r', encoding='utf-8') as infile:
+        # Treat each line as a URL directly
+        original_urls = set(infile.read().splitlines())
+        
+    for url in original_urls:
+        try:
+            # Fetch and classify the URL
+            title, description = fetch_page_metadata(url)
+            classification = classify_with_llm(title, description, url)
+            
+            # Clean description
+            cleaned_description = clean_description(description)
+            
+            # Store results, filtering out 'Other' classifications
+            if classification != 'Other':
+                results.append({
+                    'URL': url,
+                })
+        except Exception as e:
+            print(f"Error processing {url}: {e}")
+    
+    # Write results to output CSV
+    with open(output_file, 'w', newline='', encoding='utf-8') as outfile:
+        if results:
+            fieldnames = results[0].keys()
+            writer = csv.DictWriter(outfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(results)

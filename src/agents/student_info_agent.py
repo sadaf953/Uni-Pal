@@ -1,10 +1,10 @@
+# /Users/mahvishsadaf/Desktop/unipal/src/agents/student_info_agent.py
 import streamlit as st
 from src.models import StudentInfo
 import logging
 import re
 from typing import Dict
 from src.json_storage import JsonStorage
-
 
 def is_valid_email(email: str) -> bool:
     """
@@ -13,14 +13,12 @@ def is_valid_email(email: str) -> bool:
     email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     return re.match(email_regex, email) is not None
 
-
 def is_valid_phone_number(phone: str) -> bool:
     """
     Checks if the given string is a valid phone number containing only digits.
     """
     phone_regex = r"^[0-9]+$"
     return re.match(phone_regex, phone) is not None
-
 
 def collect_student_info() -> Dict | None:
     """
@@ -77,7 +75,7 @@ def collect_student_info() -> Dict | None:
             elif not is_valid_phone_number(contact_info):
                 st.error("Please enter a valid phone number (only digits).")
                 return None
-            
+
             try:
                 return {
                     'name': name,
@@ -100,7 +98,6 @@ def collect_student_info() -> Dict | None:
                 return None
 
     return None
-
 
 def student_info_page():
     st.title("Student Information")

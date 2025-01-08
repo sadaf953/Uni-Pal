@@ -1,9 +1,10 @@
 Metadata-Version: 2.1
 Name: unipal
-Version: 0.1.0
-Requires-Dist: streamlit
-Requires-Dist: langchain
-Requires-Dist: pydantic
+Version: 0.1
 Requires-Dist: python-dotenv
-Requires-Dist: serpapi
-Requires-Dist: langgraph
+Requires-Dist: requests
+Requires-Dist: beautifulsoup4
+Requires-Dist: google-generativeai==0.3.1
+Requires-Dist: langchain-google-genai==0.0.5
+Requires-Dist: streamlit
+Requires-Dist: tavily-python

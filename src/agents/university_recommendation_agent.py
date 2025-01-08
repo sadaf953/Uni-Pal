@@ -1,11 +1,14 @@
-import json
+import os
 import logging
+from dotenv import load_dotenv
 import streamlit as st
-from utils import scrape_website, extract_content_with_ai, clean_search_results
-from llm_interface import query_llm
-from travily_search import travily_search
-from config import settings
-from graph_workflow import get_workflow
+from src.utils import scrape_website, extract_content_with_ai, clean_search_results
+from src.llm_interface import query_llm
+from src.config import settings
+from src.graph_workflow import get_workflow
+
+# Load environment variables
+load_dotenv()
 
 def save_raw_results(data):
     with open('raw_results.json', 'w') as f:
@@ -102,5 +105,3 @@ def scraping_testing_page():
                     st.error("Travily API key is not configured. Please check your settings.")
         else:
             st.warning("Please enter text to search for links.")
-
-   

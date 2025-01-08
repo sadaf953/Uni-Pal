@@ -1,5 +1,8 @@
+openai==0.28.0
+python-dotenv==1.0.0
 langchain
-langchain-google-genai
+langchain-google-genai==2.0.7
+google-generativeai==0.3.1
 langchain-groq
 langchain-core
 langchain-community
@@ -7,6 +10,5 @@ langgraph
 streamlit
 beautifulsoup4
 requests
-python-dotenv
 pydantic
 tavily-python

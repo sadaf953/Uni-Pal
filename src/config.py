@@ -17,7 +17,10 @@ class Settings:
     DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite")
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq") # set groq as default LLM, use 'ollama' for local ollama
     LLM_MODEL = os.getenv("LLM_MODEL", "mixtral-8x7b-32768") #set default model
-    TRAVILY_API_KEY=os.getenv("TRAVILY_API_KEY")
+    TAVILY_API_KEY=os.getenv("TRAVILY_API_KEY")
+    API_KEY = os.getenv("API_KEY")
+    CX_CODE = os.getenv("CX_CODE")
+
     
 
     def __init__(self):
@@ -25,6 +28,9 @@ class Settings:
         logging.info(f"GROQ_API_KEY is: {self.GROQ_API_KEY}")
         logging.info(f"GOOGLE_API_KEY is: {self.GOOGLE_API_KEY}")  # Add logging for Google API key
         logging.info(f"LLM_PROVIDER is: {self.LLM_PROVIDER}")
+        logging.info(f"TRAVILY_API_KEY is: {self.TAVILY_API_KEY}")
+        logging.info(f"API_KEY is: {self.API_KEY}")
+        logging.info(f"CX_CODE is: {self.CX_CODE}")
 
 
 settings = Settings()
