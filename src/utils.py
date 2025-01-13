@@ -5,6 +5,13 @@ import requests
 from dotenv import load_dotenv
 from typing import List, Dict
 from urllib3.util.retry import Retry
+from time import sleep
+import datetime
+import json
+import time 
+import logging
+
+
 
 # LLM and web scraping imports
 from bs4 import BeautifulSoup
@@ -27,6 +34,7 @@ CX_CODE = settings.CX_CODE
 
 UNWANTED_PATTERNS = ['blogs.lse.ac']
 relevant_keywords = ['master', 'ms', 'graduate',]
+current_datetime = "some value"
 
 def setup_requests_session() -> requests.Session:
     """
@@ -53,7 +61,7 @@ def safe_log(message: str) -> None:
     Args:
         message (str): The log message to print.
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     logging.info(f"[{timestamp}] {message}")
 
 
@@ -92,62 +100,62 @@ def scrape_website(website: str) -> str:
         logging.error(f"Unexpected error while scraping {website}: {str(e)}")
         return ""
 
-def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
-    """
-    Extract relevant information from HTML content using AI.
+# def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
+#     """
+#     Extract relevant information from HTML content using AI.
     
-    Args:
-        html_content (str): Raw HTML content
-        user_request (str): User's specific request for information extraction
+#     Args:
+#         html_content (str): Raw HTML content
+#         user_request (str): User's specific request for information extraction
         
-    Returns:
-        dict: Extracted information in structured format
-    """
-    if not html_content:
-        return {"extracted_content": "", "error": "No content to analyze"}
+#     Returns:
+#         dict: Extracted information in structured format
+#     """
+#     if not html_content:
+#         return {"extracted_content": "", "error": "No content to analyze"}
 
-    try:
-        max_chars = 8000
-        content = html_content[:max_chars]
-        prompt = f"""
-        Analyze this webpage content and extract ONLY the following information, return it as a JSON object:
-        {{
-            "university_name" : "[University Name]",
-            "country" : "[Country]",
-            "tuition_fees" : "[Tuition Fees with currency]",
-            "eligibility_criteria" : "[CGPA, IELTS, TOEFL requirements]",
-            "deadlines" : "[application deadlines]",
-            "course_curriculum" : "[brief overview]",
-            "scholarship_options" : "[available scholarships]"
-        }}
+#     try:
+#         max_chars = 8000
+#         content = html_content[:max_chars]
+#         prompt = f"""
+#         Analyze this webpage content and extract ONLY the following information, return it as a JSON object:
+#         {{
+#             "university_name" : "[University Name]",
+#             "country" : "[Country]",
+#             "tuition_fees" : "[Tuition Fees with currency]",
+#             "eligibility_criteria" : "[CGPA, IELTS, TOEFL requirements]",
+#             "deadlines" : "[application deadlines]",
+#             "course_curriculum" : "[brief overview]",
+#             "scholarship_options" : "[available scholarships]"
+#         }}
 
-        Content to analyze:
-        {content}
+#         Content to analyze:
+#         {content}
 
-        If any information is not found, use 'N/A'.
-        """
-        time.sleep(1)  # Rate limiting
-        response = query_llm(prompt)
-        try:
-            return {
-            "extracted_content": json.loads(response) if response else {},
-            "source_url": "",
-            "timestamp": datetime.now().isoformat(),
-            "user_request": user_request
-        }
-        except json.JSONDecodeError as e:
-              logging.error(f"Error decoding json, returning raw content, error is: {e}")
-              return {
-                "extracted_content": response if response else {},
-                "source_url": "",
-                "timestamp": datetime.now().isoformat(),
-                "user_request": user_request
-            }
+#         If any information is not found, use 'N/A'.
+#         """
+#         time.sleep(1)  # Rate limiting
+#         response = query_llm(prompt)
+#         try:
+#             return {
+#             "extracted_content": json.loads(response) if response else {},
+#             "source_url": "",
+#             "timestamp": datetime.now().isoformat(),
+#             "user_request": user_request
+#         }
+#         except json.JSONDecodeError as e:
+#               logging.error(f"Error decoding json, returning raw content, error is: {e}")
+#               return {
+#                 "extracted_content": response if response else {},
+#                 "source_url": "",
+#                 "timestamp": datetime.now().isoformat(),
+#                 "user_request": user_request
+#             }
 
 
-    except Exception as e:
-        logging.error(f"Error in AI extraction: {str(e)}")
-        return {"extracted_content": "", "error": str(e)}
+#     except Exception as e:
+#         logging.error(f"Error in AI extraction: {str(e)}")
+#         return {"extracted_content": "", "error": str(e)}
 
 
             
@@ -213,17 +221,17 @@ def clean_search_results(state: Dict) -> Dict:
 #     except Exception as e:
 #         raise ValueError(f"Error scraping website: {str(e)}")
 
-# def extract_body_content(html_content: str) -> str:
-#     """Extract main content from HTML."""
-#     soup = BeautifulSoup(html_content, 'html.parser')
+def extract_body_content(html_content: str) -> str:
+    """Extract main content from HTML."""
+    soup = BeautifulSoup(html_content, 'html.parser')
     
-#     # Remove script and style elements
-#     for script in soup(['script', 'style', 'header', 'footer', 'nav']):
-#         script.decompose()
+    # Remove script and style elements
+    for script in soup(['script', 'style', 'header', 'footer', 'nav']):
+        script.decompose()
     
-#     # Get text content
-#     text = soup.get_text(separator='\n', strip=True)
-#     return text
+    # Get text content
+    text = soup.get_text(separator='\n', strip=True)
+    return text
 
 def clean_body_content(body_content: str) -> str:
     """Clean extracted text content."""
@@ -234,58 +242,58 @@ def clean_body_content(body_content: str) -> str:
 
 
 
-# def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
-#     """
-#     Extract relevant information from HTML content using AI based on user request.
-#     Includes retry logic and rate limiting.
+def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
+    """
+    Extract relevant information from HTML content using AI based on user request.
+    Includes retry logic and rate limiting.
     
-#     Args:
-#         html_content (str): Raw HTML content from the website
-#         user_request (str): User's specific request for information extraction
+    Args:
+        html_content (str): Raw HTML content from the website
+        user_request (str): User's specific request for information extraction
         
-#     Returns:
-#         dict: Extracted information in structured format
-#     """
-#     try:
-#         # First clean and extract the main content
-#         body_content = extract_body_content(html_content)
-#         clean_content = clean_body_content(body_content)
+    Returns:
+        dict: Extracted information in structured format
+    """
+    try:
+        # First clean and extract the main content
+        body_content = extract_body_content(html_content)
+        clean_content = clean_body_content(body_content)
         
-#         # Truncate content if too long (Gemini has token limits)
-#         max_chars = 25000  # Reduced to be more conservative
-#         if len(clean_content) > max_chars:
-#             clean_content = clean_content[:max_chars] + "...[content truncated]"
+        # Truncate content if too long (Gemini has token limits)
+        max_chars = 25000  # Reduced to be more conservative
+        if len(clean_content) > max_chars:
+            clean_content = clean_content[:max_chars] + "...[content truncated]"
         
-#         # Create a prompt for the AI
-#         prompt = f"""
-#         Analyze the following webpage content and extract information relevant to: {user_request}
+        # Create a prompt for the AI
+        prompt = f"""
+        Analyze the following webpage content and extract information relevant to: {user_request}
         
-#         Webpage content:
-#         {clean_content}
+        Webpage content:
+        {clean_content}
         
-#         Extract and structure the relevant information in a clear format using markdown.
-#         If no relevant information is found, please indicate that.
-#         Focus on the most important points and be concise.
-#         Limit your response to around 1000 words.
-#         """
+        Extract and structure the relevant information in a clear format using markdown.
+        If no relevant information is found, please indicate that.
+        Focus on the most important points and be concise.
+        Limit your response to around 1000 words.
+        """
         
-#         # Add a small delay before making the API call
-#         time.sleep(3)  # Increased delay between API calls
+        # Add a small delay before making the API call
+        time.sleep(3)  # Increased delay between API calls
         
-#         # Use configured LLM for extraction
-#         content = query_llm(prompt)
+        # Use configured LLM for extraction
+        content = query_llm(prompt)
         
-#         return {
-#             "extracted_content": content,
-#             "source_url": "",
-#             "timestamp": datetime.now().isoformat(),
-#             "user_request": user_request
-#         }
-#     except Exception as e:
-#         if "429" in str(e) or "Resource has been exhausted" in str(e):
-#             time.sleep(5)  # Add extra delay on rate limit
-#             raise Exception("API rate limit reached. Please wait a moment before trying again.")
-#         raise Exception(f"Error during AI extraction: {str(e)}")
+        return {
+            "extracted_content": content,
+            "source_url": "",
+            "timestamp": datetime.datetime.now().isoformat(),
+            "user_request": user_request
+        }
+    except Exception as e:
+        if "429" in str(e) or "Resource has been exhausted" in str(e):
+            time.sleep(5)  # Add extra delay on rate limit
+            raise Exception("API rate limit reached. Please wait a moment before trying again.")
+        raise Exception(f"Error during AI extraction: {str(e)}")
 
 
 

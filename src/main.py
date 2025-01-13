@@ -4,6 +4,8 @@ import sys
 import json
 from dotenv import load_dotenv
 import csv
+from src.utils import search_universities, build_query, save_links_to_csv, process_csv
+from agents.university_recommendation_agent import scraping_testing_page,process_all_university_links
 
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -26,6 +28,7 @@ from agents.visa_info_agent import visa_checker_page
 from agents.document_management_agent import document_checker_page
 from agents.university_recommendation_agent import scraping_testing_page
 from src.json_storage import JsonStorage
+from agents.university_recommendation_agent import  recommend_top_universities
 from src.utils import search_universities,save_links_to_csv,build_query, process_csv
 
 
@@ -76,6 +79,82 @@ import os
 
 # Assuming your other functions (student_info_page, etc.) are defined
 
+def comprehensive_university_search():
+    """
+    Comprehensive university search and recommendation workflow.
+    Performs all steps from student data to university recommendations.
+    """
+    st.title("Comprehensive University Search")
+    
+    # Start with loading student data
+    try:
+        with open('student_data.json', 'r') as f:
+            student_data = json.load(f)
+        
+        st.subheader("Student Profile")
+        st.json(student_data)
+    except FileNotFoundError:
+        st.error("Student data not found. Please complete student information first.")
+        return
+
+    # Build search query based on student data
+    try:
+        program_field = student_data.get('program_of_interest', 'Computer Science')
+        countries = student_data.get('preferred_countries', ['United States'])
+        
+        query = build_query(program_field, countries)
+        st.info(f"Generated Search Query: {query}")
+    except Exception as e:
+        st.error(f"Error building search query: {e}")
+        return
+
+    # Perform university search
+    try:
+        st.subheader("Searching Universities")
+        search_results = search_universities(query)
+        
+        # Save links to CSV
+        output_file = 'processed_universities.csv'
+        save_links_to_csv(search_results)
+        st.success(f"Found {len(search_results)} universities. Saved to {output_file}")
+    except Exception as e:
+        st.error(f"Error in university search: {e}")
+        return
+
+    # Process CSV to filter and clean links
+    try:
+        st.subheader("Processing and Filtering Links")
+        process_csv('processed_universities.csv', 'filtered_universities.csv')
+        st.success("Universities processed and filtered.")
+    except Exception as e:
+        st.error(f"Error processing universities: {e}")
+        return
+
+    # Scrape and extract content from universities
+    try:
+        st.subheader("Scraping University Websites")
+        process_all_university_links()
+        st.success("University websites scraped and content extracted.")
+    except Exception as e:
+        st.error(f"Error scraping universities: {e}")
+        return
+
+    # Generate recommendations
+    try:
+        st.subheader("University Recommendations")
+        top_universities = recommend_top_universities()
+        
+        if not top_universities.empty:
+            st.success("Top universities recommended based on your profile!")
+        else:
+            st.warning("No universities match your profile criteria.")
+    except Exception as e:
+        st.error(f"Error generating recommendations: {e}")
+        return
+
+    st.balloons()
+    st.success("Comprehensive university search completed successfully!")
+
 def main():
     st.set_page_config(layout="wide")
 
@@ -92,6 +171,11 @@ def main():
             st.session_state.current_page = "visa_checker"
         if st.button("Document Checker"):
             st.session_state.current_page = "document_checker"
+        if st.button("Generate Recommendations"):
+            st.session_state.current_page = "Generate Recommendations"
+       
+        
+        
 
     if st.session_state.current_page == "student_info":
         student_info_page()
@@ -164,6 +248,7 @@ def main():
                             st.success(f"Processed universities saved to {output_file}")
                         else:
                             st.warning("No links were available to filter.")
+                    
                     else:
                         st.error(f"Input file not found")                            
 
@@ -182,11 +267,14 @@ def main():
             else:
                 st.error(f"Input file {input_file} not found")
         
+        
         scraping_testing_page()
     elif st.session_state.current_page == "visa_checker":
         visa_checker_page()
     elif st.session_state.current_page == "document_checker":
         document_checker_page()
+    elif st.session_state.current_page == "Generate Recommendations":
+        recommend_top_universities()
 
 if __name__ == "__main__":
     if 'next_step' not in st.session_state:
