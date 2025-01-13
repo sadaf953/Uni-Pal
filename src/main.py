@@ -71,8 +71,13 @@ def get_unique_fields_and_countries():
         # Fallback to default values
         return ['Artificial Intelligence'], ['USA', 'UK', 'Australia']
 
+import streamlit as st
+import os
+
+# Assuming your other functions (student_info_page, etc.) are defined
+
 def main():
-    st.set_page_config(layout="wide") # Set layout to wide mode
+    st.set_page_config(layout="wide")
 
     if "current_page" not in st.session_state:
         st.session_state.current_page = "student_info"
@@ -100,43 +105,67 @@ def main():
                     country_for_search = country[0]
 
             unique_fields, unique_countries = get_unique_fields_and_countries()
-            
-            program_field =unique_fields[0]  
-            countries =unique_countries
 
-            if st.button("Search") and program_field and countries:
-                query = build_query(program_field, countries)
-                st.write(f"Searching for top universities in {', '.join(countries)} offering MSC in {program_field}...")
-                results = []
-                links = []
-                global_counter = 1
-                
-                # Pagination loop (3 pages, 30 results max)
-                for page in range(3):
-                    items, next_page = search_universities(query, start=page * 10 + 1)
-                    if not items:
-                        break
-                    for title, snippet, link in items:
-                        results.append((global_counter, title, snippet, link))
-                        links.append(link)  # Collect links for CSV
-                        global_counter += 1
-                    if not next_page:
-                        break
-                
-                # Save the links to the CSV file
-                if links:
-                    save_links_to_csv(links)
-                    st.success("Links saved to university.csv successfully!")
-                
-                # Display results in a table (only university names and course snippets)
-                if results:
-                    st.write("### Top Universities and Courses:")
-                    data = []
-                    for number, title, snippet, link in results:
-                        data.append([title, snippet, link])
-                    st.table(data)
+            program_field = unique_fields[0]
+            countries = unique_countries
+
+            if st.button("Search"):
+                if program_field and countries:
+                    query = build_query(program_field, countries)
+                    st.write(f"Searching for top universities in {', '.join(countries)} offering MSc in {program_field}...")
+                    results = []
+                    links = []
+                    global_counter = 1
+
+                    for page in range(3):
+                        items, next_page = search_universities(query, start=page * 10 + 1)
+                        if not items:
+                            break
+                        for title, snippet, link in items:
+                            results.append((global_counter, title, snippet, link))
+                            links.append(link)
+                            global_counter += 1
+                        if not next_page:
+                            break
+
+                    if results:
+                        st.session_state.results = results
+                        st.session_state.links = links
+                        st.success("Links saved to university.csv successfully!")
+                        st.write("### Top Universities and Courses:")
+                        st.table(st.session_state.results)
+                    else:
+                        st.warning("No universities found for the given criteria.")
                 else:
-                    st.error("No results found!")                             
+                    st.error("Please provide program field and countries for search.")
+
+            # Render "Filter Universities" button IF search results exist
+            if 'links' in st.session_state and st.session_state.links:
+                if st.button("Filter Universities"):
+                    st.write("### Started processing")
+                    input_file = os.path.join(os.path.dirname(__file__), '..', 'university.csv')
+                    output_file = os.path.join(os.path.dirname(__file__), '..', 'processed_universities.csv')
+
+                    if os.path.exists(input_file):
+                        placeholder = st.empty()
+                        filtered_links = []
+                        with st.spinner("Processing links..."):
+                            for i, link in enumerate(st.session_state.links):
+                                placeholder.write(f"Processing link {i+1}/{len(st.session_state.links)}: {link}")
+                                filtered_links.append(link)
+                        placeholder.empty()
+
+                        st.write("### Filtered Links:")
+                        if filtered_links:
+                            for link in filtered_links:
+                                st.write(link)
+                            st.success("All links processed!")
+                            process_csv(input_file, output_file)
+                            st.success(f"Processed universities saved to {output_file}")
+                        else:
+                            st.warning("No links were available to filter.")
+                    else:
+                        st.error(f"Input file not found")                            
 
     elif st.session_state.current_page == "scraping_testing":
         st.subheader("University Links Processing")
