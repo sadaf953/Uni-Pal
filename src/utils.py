@@ -22,7 +22,7 @@ from tavily import TavilyClient
 
 # Local imports
 from src.config import settings
-from src.llm_interface import Gemini_Exp1206, query_llm
+from src.llm_interface import query_llm
 import streamlit as st
 
 # Load environment variables
@@ -135,7 +135,8 @@ def scrape_website(website: str) -> str:
 #         If any information is not found, use 'N/A'.
 #         """
 #         time.sleep(1)  # Rate limiting
-#         response = query_llm(prompt)
+#         response = query_ll
+# m(prompt)
 #         try:
 #             return {
 #             "extracted_content": json.loads(response) if response else {},
@@ -258,7 +259,7 @@ def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
         body_content = extract_body_content(html_content)
         clean_content = clean_body_content(body_content)
         
-        # Truncate content if too long (Gemini has token limits)
+        # Truncate content if too long (Mixtral has token limits)
         max_chars = 25000
         if len(clean_content) > max_chars:
             clean_content = clean_content[:max_chars] + "...[content truncated]"
@@ -537,6 +538,9 @@ def process_csv(input_file, output_file):
             if classification != 'Other':
                 results.append({
                     'URL': url,
+                    'Title': title,
+                    'Description': cleaned_description,
+                    'Classification': classification
                 })
         except Exception as e:
             print(f"Error processing {url}: {e}")

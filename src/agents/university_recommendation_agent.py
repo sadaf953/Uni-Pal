@@ -11,7 +11,6 @@ import json
 import pandas as pd
 import csv
 from urllib.parse import urlparse
-from datetime import datetime
 
 
 # Load environment variables
@@ -116,10 +115,11 @@ def scraping_testing_page():
 
 def process_all_university_links():
     """
-    Process all university links from processed_universities.csv and extract information from scraped content.
+    Process all university links from processed_universities.csv and extract detailed information
+    about programs, requirements, deadlines, and costs.
     """
     st.title("Processing University Information")
-    st.write("Processing university websites...")
+    st.write("Extracting detailed information from university websites...")
     
     # Create scraping results directory if it doesn't exist
     scraping_dir = os.path.join(os.getcwd(), 'scraping_results')
@@ -169,41 +169,47 @@ def process_all_university_links():
                     }
                 })
                 
-                # Extract information from cleaned content
-                cleaned_content = cleaned_results['web_search_results']['raw_data']
-                
-                # Parse URL for basic info
-                parsed_url = urlparse(url)
-                domain = parsed_url.netloc
-                
-                # Create content structure using scraped data
-                content = {
-                    "university_name": domain.split('.')[-2].upper(),
-                    "program_details": {
-                        "name": "Computer Science",
-                        "department": "Computer Science",
-                        "raw_content": cleaned_content[:5000]  # First 5000 chars of content
-                    },
-                    "url": url,
-                    "scraped_content": cleaned_content,
-                    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
+                # Extract content with AI
+                extracted_content = extract_content_with_ai(
+                    cleaned_results['web_search_results']['raw_data'],
+                    'Extract detailed university program information'
+                )
                 
                 # Generate a safe filename from the URL
+                parsed_url = urlparse(url)
                 safe_filename = f"{parsed_url.netloc.replace('.', '_')}_details.csv"
                 file_path = os.path.join(scraping_dir, safe_filename)
                 
-                # Save to CSV
+                # Save detailed university information to CSV
+                content = extracted_content['extracted_content']
+                rows = []
+                
+                # Helper function to flatten nested dictionary
+                def flatten_dict(d, parent_key=''):
+                    items = []
+                    for k, v in d.items():
+                        new_key = f"{parent_key}_{k}" if parent_key else k
+                        if isinstance(v, dict):
+                            items.extend(flatten_dict(v, new_key).items())
+                        else:
+                            items.append((new_key, v))
+                    return dict(items)
+                
+                # Flatten the content for CSV storage
+                flattened_content = flatten_dict(content)
+                
+                # Write to CSV
                 with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
                     writer = csv.DictWriter(csvfile, fieldnames=['key', 'value'])
                     writer.writeheader()
                     
-                    # Write metadata and content
-                    writer.writerow({'key': 'url', 'value': url})
-                    writer.writerow({'key': 'university_name', 'value': content['university_name']})
-                    writer.writerow({'key': 'program_name', 'value': content['program_details']['name']})
-                    writer.writerow({'key': 'last_updated', 'value': content['last_updated']})
-                    writer.writerow({'key': 'raw_content', 'value': cleaned_content})
+                    # Write metadata
+                    writer.writerow({'key': 'source_url', 'value': url})
+                    writer.writerow({'key': 'extraction_timestamp', 'value': extracted_content['timestamp']})
+                    
+                    # Write flattened content
+                    for key, value in flattened_content.items():
+                        writer.writerow({'key': key, 'value': str(value)})
                 
                 # Add to results
                 results.append({
@@ -240,18 +246,16 @@ def process_all_university_links():
         summary_data = []
         for result in results:
             content = result['content']
-            # Get a preview of the raw content
-            content_preview = content['scraped_content'][:200] + "..." if len(content['scraped_content']) > 200 else content['scraped_content']
             summary_data.append({
-                'University': content['university_name'],
-                'Program': content['program_details']['name'],
-                'URL': content['url'],
-                'Content Preview': content_preview,
-                'Last Updated': content['last_updated']
+                'University': content.get('university_name', 'Unknown'),
+                'Program': content.get('program_details', {}).get('name', 'Not specified'),
+                'Duration': content.get('program_details', {}).get('duration', 'Not specified'),
+                'Deadline': content.get('deadlines', {}).get('regular', 'Not specified'),
+                'Tuition': content.get('tuition_fees', {}).get('total_cost', 'Not specified')
             })
         
         summary_df = pd.DataFrame(summary_data)
-        st.subheader("Quick Summary of Processed Universities")
+        st.subheader("Quick Summary of Extracted Information")
         st.dataframe(summary_df)
         
         return results
@@ -266,7 +270,7 @@ def process_all_university_links():
 
 def recommend_top_universities(student_data=None):
     """
-    Analyzes and recommends universities using Gemini LLM based on scraped data and student profile.
+    Analyzes and recommends universities using Mixtral LLM based on scraped data and student profile.
     
     Args:
         student_data (dict, optional): Student profile data. If None, loads from student_data.json
@@ -278,18 +282,40 @@ def recommend_top_universities(student_data=None):
         # Load student data if not provided
         if student_data is None:
             try:
-                with open('student_data.json', 'r') as f:
-                    student_data = json.load(f)
+                student_data_path = os.path.join(os.getcwd(), 'student_data.json')
+                with open(student_data_path, 'r') as f:
+                    data = json.load(f)
+                    # Get the first student's data
+                    if 'students' in data and data['students']:
+                        student_data = next(iter(data['students'].values()))
+                        logging.info(f"Loaded student data: {student_data}")
+                    else:
+                        st.error("❌ No student data found in the file.")
+                        return None
             except FileNotFoundError:
-                st.error("Student data not found. Please complete your profile first.")
+                st.error("❌ Student data not found. Please complete your profile first.")
+                return None
+            except json.JSONDecodeError:
+                st.error("❌ Invalid student data format. Please complete your profile again.")
+                return None
+            except Exception as e:
+                st.error(f"❌ Error loading student data: {str(e)}")
+                logging.error(f"Error loading student data: {str(e)}", exc_info=True)
                 return None
         
+        # Validate required fields
+        required_fields = ['interested_field_for_masters', 'preferred_countries']
+        missing_fields = [field for field in required_fields if not student_data.get(field)]
+        if missing_fields:
+            st.error(f"❌ Missing required profile information: {', '.join(missing_fields)}")
+            return None
+            
         st.write("🔍 Analyzing your profile and university data...")
         
         # Load university data from scraping_results directory
         scraping_dir = os.path.join(os.getcwd(), 'scraping_results')
         if not os.path.exists(scraping_dir):
-            st.error("No university data found. Please run the university search and processing first.")
+            st.error("❌ No university data found. Please run the university search and processing first.")
             return None
             
         # Load all university data
@@ -308,7 +334,7 @@ def recommend_top_universities(student_data=None):
                     continue
         
         if not university_data:
-            st.error("No processed university data found. Please run the university processing first.")
+            st.error("❌ No processed university data found. Please run the university processing first.")
             return None
             
         # Create prompt for LLM
@@ -316,21 +342,40 @@ def recommend_top_universities(student_data=None):
         Analyze the following student profile and university data to recommend the top 5 best-fitting universities.
         
         Student Profile:
-        {json.dumps(student_data, indent=2)}
+        - Field of Interest: {student_data['interested_field_for_masters']}
+        - Preferred Countries: {', '.join(student_data['preferred_countries'])}
+        - Academic Background: 
+          * BTech Branch: {student_data.get('btech_branch', 'Not specified')}
+          * BTech CGPA: {student_data.get('btech_cgpa', 'Not specified')}
+          * 12th Marks: {student_data.get('marks_12th', 'Not specified')}
+          * 10th Marks: {student_data.get('marks_10th', 'Not specified')}
+        - Test Scores:
+          * IELTS: {student_data.get('ielts_score', 'Not specified')}
+          * TOEFL: {student_data.get('toefl_score', 'Not specified')}
+        - Work Experience: {student_data.get('work_experience', 'Not specified')}
         
         Available Universities:
         {json.dumps(university_data, indent=2)}
         
         Consider these factors:
-        1. Academic alignment
-        2. Career goals
-        3. Financial feasibility
-        4. Location preferences
-        5. Research interests
-        6. Work experience
-        7. Test scores
+        1. Academic alignment with student's field ({student_data['interested_field_for_masters']})
+        2. Location preferences ({', '.join(student_data['preferred_countries'])})
+        3. Program quality and reputation
+        4. Research opportunities
+        5. Career prospects
+        6. Admission requirements vs student's scores:
+           - BTech CGPA: {student_data.get('btech_cgpa', 'Not specified')}
+           - IELTS: {student_data.get('ielts_score', 'Not specified')}
+           - TOEFL: {student_data.get('toefl_score', 'Not specified')}
+        7. Work experience relevance: {student_data.get('work_experience', 'Not specified')}
         8. Application deadlines
         9. Scholarship opportunities
+        
+        Provide specific recommendations with:
+        1. Clear explanation of program fit
+        2. Analysis of admission chances based on scores
+        3. Specific strengths of each recommended program
+        4. Action items for application
         """
         
         # Call LLM for recommendations
@@ -376,11 +421,11 @@ def recommend_top_universities(student_data=None):
             return recommendations_df
             
         except Exception as e:
-            st.error(f"Error generating recommendations: {str(e)}")
+            st.error(f"❌ Error generating recommendations: {str(e)}")
             logging.error(f"Error in LLM recommendation: {str(e)}", exc_info=True)
             return None
         
     except Exception as e:
-        st.error(f"An error occurred while generating recommendations: {str(e)}")
+        st.error(f"❌ An error occurred while generating recommendations: {str(e)}")
         logging.error(f"Error in recommend_top_universities: {str(e)}", exc_info=True)
         return None

@@ -261,8 +261,16 @@ def main():
         
         # Check if student data exists
         try:
-            with open('student_data.json', 'r') as f:
-                student_data = json.load(f)
+            student_data_path = os.path.join(os.getcwd(), 'student_data.json')
+            with open(student_data_path, 'r') as f:
+                data = json.load(f)
+                if 'students' in data and data['students']:
+                    student_data = next(iter(data['students'].values()))
+                else:
+                    st.error("❌ No student data found. Please complete your profile first.")
+                    if st.button("Go to Student Info"):
+                        st.session_state.current_page = "student_info"
+                    return
         except FileNotFoundError:
             st.error("❌ Please complete your student profile first.")
             if st.button("Go to Student Info"):
@@ -285,7 +293,35 @@ def main():
         with profile_cols[1]:
             st.write(f"**Countries:** {', '.join(student_data.get('preferred_countries', ['Not specified']))}")
         with profile_cols[2]:
-            st.write(f"**Budget:** {student_data.get('budget', 'Not specified')}")
+            st.write(f"**Work Experience:** {student_data.get('work_experience', 'Not specified')}")
+            
+        # Show academic details
+        st.subheader("📚 Academic Details")
+        academic_cols = st.columns(4)
+        with academic_cols[0]:
+            st.write(f"**BTech CGPA:** {student_data.get('btech_cgpa', 'Not specified')}")
+        with academic_cols[1]:
+            st.write(f"**BTech Branch:** {student_data.get('btech_branch', 'Not specified')}")
+        with academic_cols[2]:
+            st.write(f"**IELTS:** {student_data.get('ielts_score', 'Not specified')}")
+        with academic_cols[3]:
+            st.write(f"**TOEFL:** {student_data.get('toefl_score', 'Not specified')}")
+            
+        # Add button to process universities
+        if st.button("🔄 Process Universities", key="process_universities"):
+            # Delete and recreate scraping_results folder
+            if os.path.exists(scraping_dir):
+                import shutil
+                shutil.rmtree(scraping_dir)
+            os.makedirs(scraping_dir)
+            
+            # Call the process_all_university_links function
+            try:
+                process_all_university_links()
+                st.success("✅ Successfully processed university information!")
+            except Exception as e:
+                st.error(f"❌ Error processing universities: {str(e)}")
+                logging.error(f"Error in process_all_university_links: {str(e)}", exc_info=True)
             
         # Check if recommendations already exist
         if 'recommendations' in st.session_state:

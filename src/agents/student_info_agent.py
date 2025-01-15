@@ -120,9 +120,9 @@ def student_info_page():
             'ielts_score': 7.0,
             'toefl_score': 100,
             'work_experience': "2 years",
-            'preferred_countries': ["USA"],
-            'btech_branch': "Computer Science",
-            'interested_field_for_masters': "Computer Science",
+            'preferred_countries': ["Uk"],
+            'btech_branch': "data science and artificial intelligence",
+            'interested_field_for_masters': "artificial intelligence",
             'university_urls': {},
             'university_details': []
         }
