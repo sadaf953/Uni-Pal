@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from src.config import settings
 import datetime
+import json
 
 # Load environment variables
 load_dotenv()
@@ -39,13 +40,73 @@ def query_llm(prompt, model_name="gemini-pro", temperature=0.1, max_tokens=1024)
         # Generate response with error handling
         generation_config = {
             'temperature': temperature,
-            'max_output_tokens': max_tokens
+            'max_output_tokens': max_tokens,
+            'top_p': 1,
+            'top_k': 1,
+            'stop_sequences': ["---END---"]
         }
+        
+        # Create a more structured prompt
+        structured_prompt = f"""
+        Task: University Recommendation Analysis
+        
+        Instructions:
+        - Analyze the provided information carefully
+        - Generate recommendations in JSON format
+        - Be specific and detailed in your analysis
+        - Ensure all required fields are present
+        - Return ONLY valid JSON, no other text
+        
+        Input:
+        {prompt}
+        
+        Response format:
+        {{
+            "recommendations": [
+                {{
+                    "rank": 1,
+                    "university_name": "University Name",
+                    "program_name": "Program Name",
+                    "fit_score": 85,
+                    "key_strengths": ["strength1", "strength2"],
+                    "program_alignment": "Program alignment details",
+                    "admission_chances": "High/Medium/Low",
+                    "financial_considerations": {{
+                        "total_cost": "Estimated total cost",
+                        "available_aid": "Available aid options",
+                        "roi_assessment": "ROI assessment"
+                    }},
+                    "action_items": ["action1", "action2"]
+                }}
+            ],
+            "analysis_summary": "Overall analysis summary"
+        }}
+        
+        Remember: Return ONLY the JSON object, no other text.
+        """
         
         # Attempt to generate response
         response = model.generate_content(
-            prompt, 
-            generation_config=generation_config
+            structured_prompt,
+            generation_config=generation_config,
+            safety_settings=[
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_NONE"
+                },
+            ]
         )
         
         # Check for safety issues or generation problems
@@ -53,22 +114,22 @@ def query_llm(prompt, model_name="gemini-pro", temperature=0.1, max_tokens=1024)
             logging.error("No response generated")
             raise ValueError("No response generated from the LLM")
         
-        # Extract and return the text
-        return response.text.strip()
-    
+        # Extract and clean the response text
+        response_text = response.text.strip()
+        
+        # Log the response for debugging
+        logging.debug(f"Raw LLM Response: {response_text}")
+        
+        try:
+            response_json = json.loads(response_text)
+            return response_json
+        except json.JSONDecodeError as e:
+            logging.error(f"Failed to parse JSON response: {str(e)}")
+            raise ValueError("Invalid JSON response from the LLM")
+        
     except Exception as e:
-        # Detailed logging of the error
-        logging.error(f"LLM Query Error: {e}")
-        print(f"Detailed Error: {e}")
-        
-        # Distinguish between different types of errors
-        if "API_KEY_INVALID" in str(e):
-            print("API Key is invalid or expired. Please check your Google Cloud credentials.")
-        elif "quota" in str(e).lower():
-            print("Daily API quota exceeded. Please check your Google Cloud usage.")
-        
-        # Re-raise the exception to be handled by the caller
-        raise
+        logging.error(f"Error in query_llm: {str(e)}", exc_info=True)
+        raise e
 
 def testing_llms():
     parser = None
@@ -86,7 +147,7 @@ def testing_llms():
 
         try:
             result = query_llm(messages[1], model_name="gemini-pro")
-            f.write(f"**Response:**\n\n{result}\n\n")
+            f.write(f"**Response:**\n\n{json.dumps(result, indent=4)}\n\n")
 
         except Exception as e:
             f.write(f"**Error:**\n\n```\n{str(e)}\n```\n\n")

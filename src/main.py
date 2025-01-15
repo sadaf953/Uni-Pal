@@ -6,18 +6,7 @@ from dotenv import load_dotenv
 import csv
 from src.utils import search_universities, build_query, save_links_to_csv, process_csv
 from agents.university_recommendation_agent import scraping_testing_page,process_all_university_links
-
-# Load environment variables from .env file
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
-
-# Get the absolute path of the project root
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-
-# Add the project root to PYTHONPATH
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-import streamlit as st
+import pandas as pd
 from agents.student_info_agent import student_info_page
 from config import settings
 from models import StudentInfo
@@ -172,10 +161,7 @@ def main():
         if st.button("Document Checker"):
             st.session_state.current_page = "document_checker"
         if st.button("Generate Recommendations"):
-            st.session_state.current_page = "Generate Recommendations"
-       
-        
-        
+            st.session_state.current_page = "recommendations"
 
     if st.session_state.current_page == "student_info":
         student_info_page()
@@ -195,14 +181,13 @@ def main():
 
             if st.button("Search"):
                 if program_field and countries:
-                    query = build_query(program_field, countries)
                     st.write(f"Searching for top universities in {', '.join(countries)} offering MSc in {program_field}...")
                     results = []
                     links = []
                     global_counter = 1
 
                     for page in range(3):
-                        items, next_page = search_universities(query, start=page * 10 + 1)
+                        items, next_page = search_universities(program_field=program_field, countries=countries, start=page * 10 + 1)
                         if not items:
                             break
                         for title, snippet, link in items:
@@ -215,9 +200,13 @@ def main():
                     if results:
                         st.session_state.results = results
                         st.session_state.links = links
-                        st.success("Links saved to university.csv successfully!")
-                        st.write("### Top Universities and Courses:")
-                        st.table(st.session_state.results)
+                        try:
+                            save_links_to_csv(links)
+                            st.success("Links saved to university.csv successfully!")
+                            st.write("### Top Universities and Courses:")
+                            st.table(st.session_state.results)
+                        except Exception as e:
+                            st.error(f"Error saving links: {str(e)}")
                     else:
                         st.warning("No universities found for the given criteria.")
                 else:
@@ -246,35 +235,90 @@ def main():
                             st.success("All links processed!")
                             process_csv(input_file, output_file)
                             st.success(f"Processed universities saved to {output_file}")
+                            
+                            # Process university information right after filtering
+                            try:
+                                with st.spinner("🔍 Processing detailed university information..."):
+                                    process_all_university_links()
+                                st.success("✅ Successfully processed university information!")
+                                st.session_state.universities_processed = True
+                            except Exception as e:
+                                st.error(f"❌ Error processing university information: {str(e)}")
+                                logging.error(f"Error in process_all_university_links: {str(e)}", exc_info=True)
                         else:
                             st.warning("No links were available to filter.")
-                    
                     else:
-                        st.error(f"Input file not found")                            
+                        st.error(f"Input file not found")
 
     elif st.session_state.current_page == "scraping_testing":
-        st.subheader("University Links Processing")
-        
-        input_file = os.path.join(os.path.dirname(__file__), '..', 'university.csv')
-        output_file = os.path.join(os.path.dirname(__file__), '..', 'processed_universities.csv')
-        
-        st.write("Click the button below to process university links:")
-        if st.button("Filter Universities"):
-            if os.path.exists(input_file):
-                with st.spinner("Processing links..."):
-                    process_csv(input_file, output_file)
-                st.success(f"Processed universities saved to {output_file}")
-            else:
-                st.error(f"Input file {input_file} not found")
-        
-        
         scraping_testing_page()
     elif st.session_state.current_page == "visa_checker":
         visa_checker_page()
     elif st.session_state.current_page == "document_checker":
         document_checker_page()
-    elif st.session_state.current_page == "Generate Recommendations":
-        recommend_top_universities()
+    elif st.session_state.current_page == "recommendations":
+        st.title("🎓 University Recommendations")
+        
+        # Check if student data exists
+        try:
+            with open('student_data.json', 'r') as f:
+                student_data = json.load(f)
+        except FileNotFoundError:
+            st.error("❌ Please complete your student profile first.")
+            if st.button("Go to Student Info"):
+                st.session_state.current_page = "student_info"
+            return
+            
+        # Check if universities have been processed
+        scraping_dir = os.path.join(os.getcwd(), 'scraping_results')
+        if not os.path.exists(scraping_dir) or not os.listdir(scraping_dir):
+            st.warning("⚠️ No processed university data found. Please search and filter universities first.")
+            if st.button("Go to Student Info"):
+                st.session_state.current_page = "student_info"
+            return
+            
+        # Show student profile summary
+        st.subheader("📋 Your Profile")
+        profile_cols = st.columns(3)
+        with profile_cols[0]:
+            st.write(f"**Field:** {student_data.get('interested_field_for_masters', 'Not specified')}")
+        with profile_cols[1]:
+            st.write(f"**Countries:** {', '.join(student_data.get('preferred_countries', ['Not specified']))}")
+        with profile_cols[2]:
+            st.write(f"**Budget:** {student_data.get('budget', 'Not specified')}")
+            
+        # Check if recommendations already exist
+        if 'recommendations' in st.session_state:
+            st.success("✨ Here are your personalized university recommendations!")
+            st.dataframe(st.session_state.recommendations)
+            
+            # Add refresh button
+            if st.button("🔄 Regenerate Recommendations"):
+                st.session_state.pop('recommendations', None)
+                st.experimental_rerun()
+        else:
+            st.info("ℹ️ Ready to generate personalized recommendations based on your profile and the processed university data.")
+            
+            if st.button("🎯 Generate Recommendations", key="gen_recs", use_container_width=True):
+                try:
+                    with st.spinner("🔍 Analyzing universities and generating recommendations..."):
+                        recommendations_df = recommend_top_universities(student_data)
+                        
+                        if recommendations_df is not None:
+                            if not recommendations_df.empty:
+                                st.session_state.recommendations = recommendations_df
+                                st.success("✨ Recommendations generated successfully!")
+                                st.dataframe(recommendations_df)
+                            else:
+                                st.warning("⚠️ No matching universities found for your profile.")
+                        else:
+                            st.error("❌ Failed to generate recommendations. Please try again later.")
+                except Exception as e:
+                    st.error(f"❌ Error generating recommendations: {str(e)}")
+                    logging.error(f"Error in recommend_top_universities: {str(e)}", exc_info=True)
+                    
+                    if "429" in str(e):
+                        st.warning("⚠️ API rate limit reached. Please wait a few minutes and try again.")
 
 if __name__ == "__main__":
     if 'next_step' not in st.session_state:

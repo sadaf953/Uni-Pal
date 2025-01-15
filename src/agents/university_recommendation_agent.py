@@ -11,6 +11,7 @@ import json
 import pandas as pd
 import csv
 from urllib.parse import urlparse
+from datetime import datetime
 
 
 # Load environment variables
@@ -115,175 +116,271 @@ def scraping_testing_page():
 
 def process_all_university_links():
     """
-    Process all university links from processed_universities.csv
-    and extract content for each link.
+    Process all university links from processed_universities.csv and extract information from scraped content.
     """
-    st.title("Process All University Links")
+    st.title("Processing University Information")
+    st.write("Processing university websites...")
+    
     # Create scraping results directory if it doesn't exist
-    scraping_dir = os.path.join(os.getcwd(),'scraping_results')
+    scraping_dir = os.path.join(os.getcwd(), 'scraping_results')
     os.makedirs(scraping_dir, exist_ok=True)
+    
     try:
         # Read the CSV file
         df = pd.read_csv('processed_universities.csv')
+        
         # Check if 'URL' column exists
         if 'URL' not in df.columns:
             st.error("No 'URL' column found in the CSV file.")
             return
+        
         # Create a progress bar
         progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Initialize results storage
         results = []
+        successful_extractions = 0
+        failed_extractions = 0
+        
         # Process each URL
         for index, row in df.iterrows():
             url = row['URL']
             try:
-                # Update progress bar
-                progress_bar.progress((index + 1) / len(df))
-                st.write(f"Processing: {url}")
-                # Scrape website
-                raw_results = scrape_website(url)
+                # Update progress
+                progress = (index + 1) / len(df)
+                progress_bar.progress(progress)
+                status_text.text(f"Processing {index + 1} of {len(df)}: {url}")
+                
+                # Scrape website with error handling
+                try:
+                    raw_results = scrape_website(url)
+                    if not raw_results:
+                        st.warning(f"No content found for {url}")
+                        continue
+                except Exception as e:
+                    st.warning(f"Failed to scrape {url}: {str(e)}")
+                    continue
+                
                 # Clean results
                 cleaned_results = clean_search_results({
                     "web_search_results": {
                         "raw_data": raw_results
                     }
                 })
-                # Extract content with AI
-                extracted_content = extract_content_with_ai(
-                    cleaned_results['web_search_results']['raw_data'], 
-                    'Extract university program information'
-                )
-                # Generate a safe filename from the URL
+                
+                # Extract information from cleaned content
+                cleaned_content = cleaned_results['web_search_results']['raw_data']
+                
+                # Parse URL for basic info
                 parsed_url = urlparse(url)
+                domain = parsed_url.netloc
+                
+                # Create content structure using scraped data
+                content = {
+                    "university_name": domain.split('.')[-2].upper(),
+                    "program_details": {
+                        "name": "Computer Science",
+                        "department": "Computer Science",
+                        "raw_content": cleaned_content[:5000]  # First 5000 chars of content
+                    },
+                    "url": url,
+                    "scraped_content": cleaned_content,
+                    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
+                # Generate a safe filename from the URL
                 safe_filename = f"{parsed_url.netloc.replace('.', '_')}_details.csv"
                 file_path = os.path.join(scraping_dir, safe_filename)
-                # Save individual university details to CSV
+                
+                # Save to CSV
                 with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
-                    # Flatten the extracted content
                     writer = csv.DictWriter(csvfile, fieldnames=['key', 'value'])
                     writer.writeheader()
                     
-                    # Write source URL
-                    writer.writerow({'key': 'Source URL', 'value': url})
-                    
-                    # Write timestamp
-                    writer.writerow({'key': 'Timestamp', 'value': extracted_content.get('timestamp', '')})
-                    
-                    # If extracted_content is a dictionary, write its contents
-                    if isinstance(extracted_content.get('extracted_content'), dict):
-                        for key, value in extracted_content['extracted_content'].items():
-                            writer.writerow({'key': key, 'value': str(value)})
-                    else:
-                        # If it's a string or something else, write it as a single value
-                        writer.writerow({'key': 'Extracted Content', 'value': str(extracted_content.get('extracted_content', ''))})
+                    # Write metadata and content
+                    writer.writerow({'key': 'url', 'value': url})
+                    writer.writerow({'key': 'university_name', 'value': content['university_name']})
+                    writer.writerow({'key': 'program_name', 'value': content['program_details']['name']})
+                    writer.writerow({'key': 'last_updated', 'value': content['last_updated']})
+                    writer.writerow({'key': 'raw_content', 'value': cleaned_content})
                 
                 # Add to results
-                extracted_content['source_url'] = url
-                results.append(extracted_content)
+                results.append({
+                    'url': url,
+                    'filename': safe_filename,
+                    'content': content
+                })
                 
-                # Optional: Save intermediate results
-                with open('all_university_results.json', 'w') as f:
+                successful_extractions += 1
+                
+                # Save intermediate results
+                with open(os.path.join(scraping_dir, 'all_results.json'), 'w') as f:
                     json.dump(results, f, indent=2)
                 
             except Exception as e:
-                st.error(f"Error processing {url}: {e}")
-                logging.error(f"Error processing {url}: {e}")
+                st.error(f"Error processing {url}: {str(e)}")
+                logging.error(f"Error processing {url}: {str(e)}", exc_info=True)
+                failed_extractions += 1
+                continue
         
         # Complete progress bar
         progress_bar.progress(100)
-        # Display results
-        st.subheader("Processed Results")
-        st.json(results)
-        # Save final results
-        with open('all_university_results.json', 'w') as f:
-            json.dump(results, f, indent=2)
-        st.success(f"Processed {len(results)} university links successfully!")
-        st.info(f"Individual university details saved in {scraping_dir}")
+        status_text.text("Processing complete!")
+        
+        # Display summary
+        st.success(f"""
+        Processing Complete!
+        - Successfully processed: {successful_extractions} universities
+        - Failed to process: {failed_extractions} universities
+        - Results saved in: {scraping_dir}
+        """)
+        
+        # Create a summary DataFrame
+        summary_data = []
+        for result in results:
+            content = result['content']
+            # Get a preview of the raw content
+            content_preview = content['scraped_content'][:200] + "..." if len(content['scraped_content']) > 200 else content['scraped_content']
+            summary_data.append({
+                'University': content['university_name'],
+                'Program': content['program_details']['name'],
+                'URL': content['url'],
+                'Content Preview': content_preview,
+                'Last Updated': content['last_updated']
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        st.subheader("Quick Summary of Processed Universities")
+        st.dataframe(summary_df)
+        
+        return results
+        
     except FileNotFoundError:
         st.error("processed_universities.csv not found. Please run university search first.")
     except Exception as e:
-        st.error(f"An error occurred: {e}")
-        logging.error(f"Error in processing university links: {e}")
+        st.error(f"An error occurred: {str(e)}")
+        logging.error(f"Error in processing university links: {str(e)}", exc_info=True)
+        return None
 
 
-
-def recommend_top_universities(student_data):
+def recommend_top_universities(student_data=None):
     """
-    Analyzes and recommends top 5 universities based on scraped data and student profile.
-
+    Analyzes and recommends universities using Gemini LLM based on scraped data and student profile.
+    
     Args:
-        student_data (dict): A dictionary containing the student's information.
-
+        student_data (dict, optional): Student profile data. If None, loads from student_data.json
+        
     Returns:
-        pd.DataFrame: Recommended universities with key details.
+        pd.DataFrame: DataFrame containing top 5 university recommendations with details
     """
-
-    # Collect university details from scraping results
-    scraping_dir = os.path.join(os.getcwd(), 'scraping_results')
-    university_details = []
-
-    for filename in os.listdir(scraping_dir):
-        if filename.endswith('_details.csv'):
-            file_path = os.path.join(scraping_dir, filename)
+    try:
+        # Load student data if not provided
+        if student_data is None:
             try:
-                df = pd.read_csv(file_path)
-                uni_info = df.set_index('key')['value'].to_dict()
-                university_details.append(uni_info)
-            except Exception as e:
-                print(f"Error reading or processing {filename}: {e}")
-
-    universities_df = pd.DataFrame(university_details)
-
-    # Basic recommendation logic (can be enhanced)
-    # This is a placeholder, implement more sophisticated logic
-    ranked_universities = []
-    for index, uni in universities_df.iterrows():
-        score = 0
-        # Example: Check if student's preferred major is in the curriculum
-        if student_data.get('preferred_major') and uni.get('course_curriculum', '').lower().__contains__(student_data['preferred_major'].lower()):
-            score += 1
-
-        # Example: Check if student meets basic eligibility (can be more complex)
-        # This assumes student_data has fields like 'gpa', 'test_scores'
-        if student_data.get('gpa') and uni.get('eligibility_criteria', '').lower().__contains__('gpa'):
-            try:
-                # Very basic check - assumes eligibility mentions 'GPA' and a value
-                uni_gpa_req = float(''.join(filter(str.isdigit or str.isalpha or str.isspace or (lambda c: c in ['.']), uni.get('eligibility_criteria', '').lower().split('gpa')[1].split()[0])))
-                if student_data['gpa'] >= uni_gpa_req:
-                    score += 1
-            except:
-                pass # Could not parse GPA requirement
-
-        # Consider tuition fees (can compare with student's budget if available)
-        # This is a very basic check, you'll need to parse the fee strings
-        if uni.get('tuition_fees', 'N/A') != 'N/A':
-            try:
-                # Very basic fee comparison - assumes a simple numerical fee
-                uni_fees = float(''.join(filter(str.isdigit, uni['tuition_fees'])))
-                # Example: Lower fees might be preferred (can adjust logic)
-                if student_data.get('budget') and uni_fees <= student_data['budget']:
-                    score += 1
-            except:
-                pass
-
-        ranked_universities.append((uni, score))
-
-    # Sort universities by score (higher score is better)
-    ranked_universities.sort(key=lambda item: item[1], reverse=True)
-
-    # Select top 5 universities
-    top_5_universities = [item[0] for item in ranked_universities[:5]]
-
-    # Prepare the output DataFrame
-    recommendations_data = []
-    for uni in top_5_universities:
-        recommendations_data.append({
-            'University Name': uni.get('university_name', 'N/A'),
-            'Fees': uni.get('tuition_fees', 'N/A'),
-            'Curriculum': uni.get('course_curriculum', 'N/A'),
-            'Eligibility': uni.get('eligibility_criteria', 'N/A'),
-            'Scholarships Available': uni.get('scholarship_options', 'N/A')
-        })
-
-    recommendations_df = pd.DataFrame(recommendations_data)
-    return recommendations_df
-
+                with open('student_data.json', 'r') as f:
+                    student_data = json.load(f)
+            except FileNotFoundError:
+                st.error("Student data not found. Please complete your profile first.")
+                return None
+        
+        st.write("🔍 Analyzing your profile and university data...")
+        
+        # Load university data from scraping_results directory
+        scraping_dir = os.path.join(os.getcwd(), 'scraping_results')
+        if not os.path.exists(scraping_dir):
+            st.error("No university data found. Please run the university search and processing first.")
+            return None
+            
+        # Load all university data
+        university_data = []
+        for filename in os.listdir(scraping_dir):
+            if filename.endswith('_details.csv'):
+                file_path = os.path.join(scraping_dir, filename)
+                try:
+                    # Read CSV and convert to dictionary
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        data = {row['key']: row['value'] for row in reader}
+                        university_data.append(data)
+                except Exception as e:
+                    logging.error(f"Error reading {filename}: {str(e)}")
+                    continue
+        
+        if not university_data:
+            st.error("No processed university data found. Please run the university processing first.")
+            return None
+            
+        # Create prompt for LLM
+        prompt = f"""
+        Analyze the following student profile and university data to recommend the top 5 best-fitting universities.
+        
+        Student Profile:
+        {json.dumps(student_data, indent=2)}
+        
+        Available Universities:
+        {json.dumps(university_data, indent=2)}
+        
+        Consider these factors:
+        1. Academic alignment
+        2. Career goals
+        3. Financial feasibility
+        4. Location preferences
+        5. Research interests
+        6. Work experience
+        7. Test scores
+        8. Application deadlines
+        9. Scholarship opportunities
+        """
+        
+        # Call LLM for recommendations
+        try:
+            recommendations = query_llm(prompt)
+            
+            # Create a DataFrame for display
+            df_data = []
+            for rec in recommendations['recommendations']:
+                df_data.append({
+                    'Rank': rec['rank'],
+                    'University': rec['university_name'],
+                    'Program': rec['program_name'],
+                    'Fit Score': f"{rec['fit_score']}/100",
+                    'Key Strengths': ', '.join(rec['key_strengths']),
+                    'Admission Chances': rec['admission_chances']
+                })
+                
+            recommendations_df = pd.DataFrame(df_data)
+            
+            # Display detailed information
+            st.markdown("### 🎓 Detailed Analysis")
+            st.markdown(f"**Overall Summary:**\n{recommendations['analysis_summary']}")
+            
+            st.markdown("### 📊 University Details")
+            for rec in recommendations['recommendations']:
+                with st.expander(f"#{rec['rank']} - {rec['university_name']}"):
+                    st.markdown(f"""
+                    * **Program:** {rec['program_name']}
+                    * **Fit Score:** {rec['fit_score']}/100
+                    * **Key Strengths:**
+                      * {' * '.join(rec['key_strengths'])}
+                    * **Program Alignment:** {rec['program_alignment']}
+                    * **Admission Chances:** {rec['admission_chances']}
+                    * **Financial Considerations:**
+                      * Total Cost: {rec['financial_considerations']['total_cost']}
+                      * Available Aid: {rec['financial_considerations']['available_aid']}
+                      * ROI: {rec['financial_considerations']['roi_assessment']}
+                    * **Next Steps:**
+                      * {' * '.join(rec['action_items'])}
+                    """)
+            
+            return recommendations_df
+            
+        except Exception as e:
+            st.error(f"Error generating recommendations: {str(e)}")
+            logging.error(f"Error in LLM recommendation: {str(e)}", exc_info=True)
+            return None
+        
+    except Exception as e:
+        st.error(f"An error occurred while generating recommendations: {str(e)}")
+        logging.error(f"Error in recommend_top_universities: {str(e)}", exc_info=True)
+        return None

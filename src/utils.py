@@ -244,15 +244,14 @@ def clean_body_content(body_content: str) -> str:
 
 def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
     """
-    Extract relevant information from HTML content using AI based on user request.
-    Includes retry logic and rate limiting.
+    Extract specific university information from HTML content using AI.
     
     Args:
         html_content (str): Raw HTML content from the website
         user_request (str): User's specific request for information extraction
         
     Returns:
-        dict: Extracted information in structured format
+        dict: Structured university information
     """
     try:
         # First clean and extract the main content
@@ -260,29 +259,103 @@ def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
         clean_content = clean_body_content(body_content)
         
         # Truncate content if too long (Gemini has token limits)
-        max_chars = 25000  # Reduced to be more conservative
+        max_chars = 25000
         if len(clean_content) > max_chars:
             clean_content = clean_content[:max_chars] + "...[content truncated]"
         
-        # Create a prompt for the AI
+        # Create a structured prompt for the AI
         prompt = f"""
-        Analyze the following webpage content and extract information relevant to: {user_request}
+        You are a university data extraction expert. Analyze the following webpage content and extract specific information about the university program.
         
         Webpage content:
         {clean_content}
         
-        Extract and structure the relevant information in a clear format using markdown.
-        If no relevant information is found, please indicate that.
-        Focus on the most important points and be concise.
-        Limit your response to around 1000 words.
+        Extract the following information in a structured format:
+        1. University Name: Full name of the university
+        2. Program Details:
+           - Program Name
+           - Department/School
+           - Duration
+           - Start Dates
+        3. Curriculum: Key courses and specializations offered
+        4. Admission Requirements:
+           - Academic requirements (GPA, degrees)
+           - Test scores (GRE, TOEFL, IELTS)
+           - Required documents
+        5. Application Deadlines:
+           - Priority deadline
+           - Regular deadline
+           - Rolling admissions if applicable
+        6. Tuition and Fees:
+           - Total program cost
+           - Per semester/year breakdown
+           - Additional fees
+        7. Scholarship Options:
+           - Types of scholarships available
+           - Eligibility criteria
+           - Application process
+        8. Contact Information:
+           - Department contact
+           - Admissions office contact
+           - Website/Email
+
+        Format your response as a JSON object with these exact keys. If information is not found, use "Not specified" as the value.
+        Be precise and factual. Do not make assumptions or add information not present in the source.
         """
         
         # Add a small delay before making the API call
-        time.sleep(3)  # Increased delay between API calls
+        time.sleep(2)
         
         # Use configured LLM for extraction
-        content = query_llm(prompt)
+        response = query_llm(prompt)
         
+        # Try to parse the response as JSON
+        try:
+            if isinstance(response, str):
+                # Clean up the response string (remove markdown formatting if present)
+                response = response.replace('```json', '').replace('```', '').strip()
+                content = json.loads(response)
+            else:
+                content = response
+        except json.JSONDecodeError:
+            # If JSON parsing fails, structure the response in a basic way
+            content = {
+                "university_name": "Not specified",
+                "program_details": {
+                    "name": "Not specified",
+                    "department": "Not specified",
+                    "duration": "Not specified",
+                    "start_dates": "Not specified"
+                },
+                "curriculum": "Not specified",
+                "admission_requirements": {
+                    "academic": "Not specified",
+                    "test_scores": "Not specified",
+                    "documents": "Not specified"
+                },
+                "deadlines": {
+                    "priority": "Not specified",
+                    "regular": "Not specified",
+                    "rolling": "Not specified"
+                },
+                "tuition_fees": {
+                    "total_cost": "Not specified",
+                    "breakdown": "Not specified",
+                    "additional_fees": "Not specified"
+                },
+                "scholarships": {
+                    "types": "Not specified",
+                    "eligibility": "Not specified",
+                    "application": "Not specified"
+                },
+                "contact_info": {
+                    "department": "Not specified",
+                    "admissions": "Not specified",
+                    "website_email": "Not specified"
+                },
+                "raw_extraction": response
+            }
+
         return {
             "extracted_content": content,
             "source_url": "",
@@ -291,7 +364,7 @@ def extract_content_with_ai(html_content: str, user_request: str) -> Dict:
         }
     except Exception as e:
         if "429" in str(e) or "Resource has been exhausted" in str(e):
-            time.sleep(5)  # Add extra delay on rate limit
+            time.sleep(5)
             raise Exception("API rate limit reached. Please wait a moment before trying again.")
         raise Exception(f"Error during AI extraction: {str(e)}")
 
@@ -305,44 +378,63 @@ def save_links_to_csv(links):
         links (list): A list of URLs to save.
     """
     try:
-        # Log total number of links
-        print(f"Total links: {len(links)}")
+        # Create the output directory if it doesn't exist
+        output_dir = os.path.dirname(os.path.abspath('university.csv'))
+        os.makedirs(output_dir, exist_ok=True)
         
-        # Ensure the file is saved in the project root
-        csv_path = os.path.join(os.path.dirname(__file__), '..', 'university.csv')
-        
-        # Open the file in write mode, creating it if it doesn't exist
-        with open(csv_path, 'w', newline='', encoding='utf-8') as file:
-            writer = csv.writer(file)
+        # Save links to CSV
+        with open('university.csv', 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['URL'])  # Write header
             for link in links:
                 writer.writerow([link])
-        
-        print(f"Saved {len(links)} links to {csv_path}")
-    
+                
+        logging.info(f"Successfully saved {len(links)} links to university.csv")
+        return True
     except Exception as e:
-        print(f"Error saving links to CSV: {e}")
+        logging.error(f"Error saving links to CSV: {str(e)}", exc_info=True)
+        raise Exception(f"Failed to save links: {str(e)}")
 
 
-
-def search_universities(query, start=1):
-    url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={API_KEY}&cx={CX_CODE}&start={start}"
-    response = requests.get(url)
-    results = response.json()
+def search_universities(program_field, countries, start=1):
+    """
+    Search for universities based on program field and countries.
     
-    items = []
-    if 'items' in results:
-        for item in results['items']:
-            title = item.get('title', 'No title available')
-            snippet = item.get('snippet', '')
-            link = item.get('link', '')
-            
-            # Check if the link contains any unwanted patterns
-            if not any(pattern in link for pattern in UNWANTED_PATTERNS):
-                items.append((title, snippet, link))
-    
-    next_page = results.get('queries', {}).get('nextPage', [])
-    return items, next_page
-
+    Args:
+        program_field (str): Field of study
+        countries (list): List of target countries
+        start (int): Starting index for pagination
+        
+    Returns:
+        tuple: (list of results, has next page)
+    """
+    try:
+        # Build the search query
+        query = build_query(program_field, countries)
+        
+        # Make the API request
+        url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={API_KEY}&cx={CX_CODE}&start={start}"
+        response = requests.get(url)
+        response.raise_for_status()  # Raise exception for bad status codes
+        results = response.json()
+        
+        items = []
+        if 'items' in results:
+            for item in results['items']:
+                title = item.get('title', 'No title available')
+                snippet = item.get('snippet', '')
+                link = item.get('link', '')
+                
+                # Check if the link contains any unwanted patterns
+                if not any(pattern in link for pattern in UNWANTED_PATTERNS):
+                    items.append((title, snippet, link))
+        
+        next_page = bool(results.get('queries', {}).get('nextPage', []))
+        return items, next_page
+        
+    except Exception as e:
+        logging.error(f"Search error: {str(e)}")
+        raise Exception(f"Failed to search universities: {str(e)}")
 
 
 def build_query(program_field, countries):

@@ -1,117 +1,127 @@
 from langgraph.graph import StateGraph, END
 from src.agents.student_info_agent import collect_student_info
-  # Import the agent
-# from src.agents.visa_info_agent import fetch_visa_info
-# from src.agents.scholarship_info_agent import fetch_scholarship_info
-# from src.agents.management_agent import manage_state
-# from src.agents.document_management_agent import manage_documents
-from src.models import StudentInfo # , University, VisaInfo, ScholarshipInfo, Document # Remove unused imports
-from typing import Dict, List, Optional
+from src.utils import search_universities, build_query, save_links_to_csv, process_csv
+from src.models import StudentInfo
+from typing import Dict, List, Optional, TypedDict, Annotated
 import logging
 import streamlit as st
 from typing import Annotated
 import typing
 from src.llm_interface import query_llm
+import pandas as pd
 
+class WorkflowState(TypedDict):
+    student_info: Optional[Dict]
+    search_results: Optional[List]
+    processed_universities: Optional[List]
+    recommendations: Optional[List]
+    error: Optional[str]
 
-
-def handle_error(state: typing.Dict, error: Exception) -> typing.Dict:
+def handle_error(state: WorkflowState, error: Exception) -> WorkflowState:
     """
     Handles errors in the graph and provides a human in the loop fallback.
-
-    Args:
-        state: The current state of the graph.
-        error: The error that occurred.
-
-    Returns:
-        The updated state.
     """
     logging.error(f"Error in graph: {error}")
-    st.error(f"An error occurred: {error}. Please check the logs for more details: {error}")
-    st.error(f"Error Details: {str(error)}")
+    state["error"] = str(error)
+    st.error(f"An error occurred: {error}")
     return state
 
-def update_state(state: typing.Dict, updates: Dict) -> typing.Dict:
+def update_state(state: WorkflowState, updates: Dict) -> WorkflowState:
     """
     Updates the state dictionary with new values
-
-    Args:
-      state: The current state of the graph.
-      updates: The updates to be applied to the state.
-
-    Returns:
-      The updated state.
     """
     if isinstance(updates, dict):
         state.update(updates)
     return state
 
+def search_universities_node(state: WorkflowState) -> WorkflowState:
+    """
+    Node for searching universities based on student preferences
+    """
+    try:
+        if not state.get("student_info"):
+            raise ValueError("Student information not available")
+        
+        program_field = state["student_info"].get("interested_field_for_masters")
+        countries = state["student_info"].get("preferred_countries", [])
+        
+        query = build_query(program_field, countries)
+        search_results = search_universities(query)
+        save_links_to_csv(search_results)
+        
+        return update_state(state, {"search_results": search_results})
+    except Exception as e:
+        return handle_error(state, e)
 
+def process_universities_node(state: WorkflowState) -> WorkflowState:
+    """
+    Node for processing and filtering university links
+    """
+    try:
+        if not state.get("search_results"):
+            raise ValueError("No search results available")
+        
+        process_csv('university.csv', 'processed_universities.csv')
+        
+        # Import here to avoid circular import
+        from src.agents.university_recommendation_agent import process_all_university_links
+        processed_results = process_all_university_links()
+        
+        return update_state(state, {"processed_universities": processed_results})
+    except Exception as e:
+        return handle_error(state, e)
 
+def generate_recommendations_node(state: WorkflowState) -> WorkflowState:
+    """
+    Node for generating final university recommendations
+    """
+    try:
+        if not state.get("processed_universities"):
+            raise ValueError("No processed university data available")
+        
+        # Import here to avoid circular import
+        from src.agents.university_recommendation_agent import recommend_top_universities
+        recommendations = recommend_top_universities(state.get("student_info", {}))
+        return update_state(state, {"recommendations": recommendations})
+    except Exception as e:
+        return handle_error(state, e)
 
+def should_continue(state: WorkflowState) -> bool:
+    """
+    Determines if the workflow should continue based on state
+    """
+    return not state.get("error") and state.get("student_info") is not None
 
-
-def get_workflow():
+def get_workflow() -> StateGraph:
     """
     Defines and returns the LangGraph workflow for the application.
     """
-    # builder = StateGraph(StudentInfo) # Change the state to StudentInfo
-
-    # # Define the nodes with state update
-    # builder.add_node("student_info", collect_student_info) # remove the lambda function
-
-    # Modify university_recommendations_node to use the university_search_agent
-    # builder.add_node("university_recommendations", university_search_agent)
-    # def visa_info_node(state):
-    #   if state and state.get('universities'):
-    #     try:
-    #         country = state['universities'][0].name.split(",")[-1].strip()
-    #         visa_info = fetch_visa_info(country)
-    #         return update_state(state, {"visa_info": visa_info})
-    #     except Exception as e:
-    #         logging.error(f"Error in visa_info_node: {e}")
-    #         st.error(f"Error getting visa information: {e}")
-    #         return state
-    #
-    #   else:
-    #     st.error("University information not available.")
-    #     return state
-    #
-    # builder.add_node("visa_info", visa_info_node)
-    #
-    # def scholarship_info_node(state):
-    #   if state:
-    #     try:
-    #         scholarship_info = fetch_scholarship_info(state)
-    #         return update_state(state, {"scholarships": scholarship_info})
-    #     except Exception as e:
-    #         logging.error(f"Error in scholarship_info_node: {e}")
-    #         st.error(f"Error getting scholarship information: {e}")
-    #         return state
-    #   else:
-    #     st.error("Student information not available.")
-    #     return state
-    #
-    # builder.add_node("scholarship_info", scholarship_info_node)
-    #
-    # builder.add_node("document_management", lambda state: update_state(state, manage_documents(state)))
-    # builder.add_node("management", manage_state)
-
-    # # Set the entry point
-    # builder.set_entry_point("student_info")
-
-    # # Define the edges
-    # builder.add_edge("student_info", "university_recommendations")
-    # # builder.add_edge("university_recommendations", "visa_info")
-    # # builder.add_edge("university_recommendations", "scholarship_info")
-    # #
-    # # builder.add_edge("visa_info", "document_management")
-    # # builder.add_edge("scholarship_info", "document_management")
-
-    # builder.add_edge("university_recommendations", "management")
-    # builder.add_edge("management", END)
-
-    # # Add error handling
-    # builder.add_exception_handler("*", handle_error)
-
-    # return builder.compile()
+    # Initialize the workflow graph
+    workflow = StateGraph(WorkflowState)
+    
+    # Add nodes to the graph
+    workflow.add_node("collect_student_info", collect_student_info)
+    workflow.add_node("search_universities", search_universities_node)
+    workflow.add_node("process_universities", process_universities_node)
+    workflow.add_node("generate_recommendations", generate_recommendations_node)
+    
+    # Define the workflow edges
+    workflow.add_edge("collect_student_info", "search_universities")
+    workflow.add_edge("search_universities", "process_universities")
+    workflow.add_edge("process_universities", "generate_recommendations")
+    workflow.add_edge("generate_recommendations", END)
+    
+    # Set conditional edges
+    workflow.add_conditional_edges(
+        "collect_student_info",
+        should_continue,
+        {
+            True: "search_universities",
+            False: END
+        }
+    )
+    
+    # Set the entry point
+    workflow.set_entry_point("collect_student_info")
+    
+    return workflow.compile()
